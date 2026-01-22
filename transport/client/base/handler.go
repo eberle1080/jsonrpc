@@ -3,7 +3,7 @@ package base
 import (
 	"context"
 	"fmt"
-	"github.com/viant/jsonrpc"
+	"github.com/eberle1080/jsonrpc"
 )
 
 // Handler represents a default handler

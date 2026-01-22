@@ -3,8 +3,8 @@ package base
 import (
 	"context"
 	"encoding/json"
-	"github.com/viant/jsonrpc"
-	"github.com/viant/jsonrpc/transport"
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
 	"time"
 )
 

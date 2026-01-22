@@ -2,7 +2,7 @@ package stdio
 
 import (
 	"fmt"
-	"github.com/viant/jsonrpc"
+	"github.com/eberle1080/jsonrpc"
 	"io"
 )
 

@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/viant/jsonrpc"
-	"github.com/viant/jsonrpc/transport/server/base"
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport/server/base"
 )
 
 // frameJSON is kept for compatibility with earlier code (id-less framing).

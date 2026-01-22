@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/viant/jsonrpc"
-	"github.com/viant/jsonrpc/transport/base"
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport/base"
 )
 
 // Handler represents a jsonrpc endpoint

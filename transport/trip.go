@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/viant/jsonrpc"
+	"github.com/eberle1080/jsonrpc"
 	"sync/atomic"
 	"time"
 )

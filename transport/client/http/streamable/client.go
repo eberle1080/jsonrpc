@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/viant/afs/url"
-	"github.com/viant/jsonrpc"
-	"github.com/viant/jsonrpc/transport"
-	"github.com/viant/jsonrpc/transport/client/base"
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
+	"github.com/eberle1080/jsonrpc/transport/client/base"
 	"net/http/cookiejar"
 	"sync"
 )

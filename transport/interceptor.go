@@ -2,7 +2,7 @@ package transport
 
 import (
 	"context"
-	"github.com/viant/jsonrpc"
+	"github.com/eberle1080/jsonrpc"
 )
 
 // Interceptor defines an interface for intercepting JSON-RPC requests and responses for specific methods

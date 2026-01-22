@@ -1,8 +1,8 @@
 # JSON-RPC
 
-[![GoDoc](https://godoc.org/github.com/viant/jsonrpc?status.svg)](https://godoc.org/github.com/viant/jsonrpc)
-[![Go Report Card](https://goreportcard.com/badge/github.com/viant/jsonrpc)](https://goreportcard.com/report/github.com/viant/jsonrpc)
-[![GoReportCard](https://goreportcard.com/badge/github.com/viant/jsonrpc)](https://goreportcard.com/report/github.com/viant/jsonrpc)
+[![GoDoc](https://godoc.org/github.com/eberle1080/jsonrpc?status.svg)](https://godoc.org/github.com/eberle1080/jsonrpc)
+[![Go Report Card](https://goreportcard.com/badge/github.com/eberle1080/jsonrpc)](https://goreportcard.com/report/github.com/eberle1080/jsonrpc)
+[![GoReportCard](https://goreportcard.com/badge/github.com/eberle1080/jsonrpc)](https://goreportcard.com/report/github.com/eberle1080/jsonrpc)
 
 This package implements the [JSON-RPC 2.0](https://www.jsonrpc.org/specification) protocol in Go, providing a lightweight and efficient way to create JSON-RPC clients and servers.
 
@@ -18,7 +18,7 @@ This package implements the [JSON-RPC 2.0](https://www.jsonrpc.org/specification
 ## Installation
 
 ```bash
-go get github.com/viant/jsonrpc
+go get github.com/eberle1080/jsonrpc
 ```
 
 ### HTTP Streamable (NDJSON) Transport
@@ -37,10 +37,10 @@ Packages:
 
 ```go
 // Server
-import streamsrv "github.com/viant/jsonrpc/transport/server/http/streamable"
+import streamsrv "github.com/eberle1080/jsonrpc/transport/server/http/streamable"
 
 // Client
-import streamcli "github.com/viant/jsonrpc/transport/client/http/streamable"
+import streamcli "github.com/eberle1080/jsonrpc/transport/client/http/streamable"
 ```
 
 Minimal server example:
@@ -51,10 +51,10 @@ package main
 import (
     "context"
     "net/http"
-    "github.com/viant/jsonrpc"
-    "github.com/viant/jsonrpc/transport"
-    streamsrv "github.com/viant/jsonrpc/transport/server/http/streamable"
-    ssnsession "github.com/viant/jsonrpc/transport/server/http/session"
+    "github.com/eberle1080/jsonrpc"
+    "github.com/eberle1080/jsonrpc/transport"
+    streamsrv "github.com/eberle1080/jsonrpc/transport/server/http/streamable"
+    ssnsession "github.com/eberle1080/jsonrpc/transport/server/http/session"
 )
 
 type handler struct{}
@@ -83,8 +83,8 @@ package main
 import (
     "context"
     "fmt"
-    "github.com/viant/jsonrpc"
-    streamcli "github.com/viant/jsonrpc/transport/client/http/streamable"
+    "github.com/eberle1080/jsonrpc"
+    streamcli "github.com/eberle1080/jsonrpc/transport/client/http/streamable"
 )
 
 func main() {
@@ -174,7 +174,7 @@ package mystore
 import (
     "context"
     "time"
-    "github.com/viant/jsonrpc/transport/server/auth"
+    "github.com/eberle1080/jsonrpc/transport/server/auth"
 )
 
 type Store struct {
@@ -242,8 +242,8 @@ package main
 import (
     "context"
     "fmt"
-    "github.com/viant/jsonrpc"
-    "github.com/viant/jsonrpc/transport/client/stdio"
+    "github.com/eberle1080/jsonrpc"
+    "github.com/eberle1080/jsonrpc/transport/client/stdio"
 )
 
 func main() {
@@ -328,9 +328,9 @@ package main
 
 import (
     "context"
-    "github.com/viant/jsonrpc"
-    "github.com/viant/jsonrpc/transport"
-    "github.com/viant/jsonrpc/transport/server/stdio"
+    "github.com/eberle1080/jsonrpc"
+    "github.com/eberle1080/jsonrpc/transport"
+    "github.com/eberle1080/jsonrpc/transport/server/stdio"
     "os"
 )
 
@@ -388,8 +388,8 @@ package main
 import (
     "context"
     "fmt"
-    "github.com/viant/jsonrpc"
-    "github.com/viant/jsonrpc/transport/client/http/sse"
+    "github.com/eberle1080/jsonrpc"
+    "github.com/eberle1080/jsonrpc/transport/client/http/sse"
     "time"
 )
 
@@ -444,9 +444,9 @@ import (
     "context"
     "fmt"
 	"encoding/json"
-    "github.com/viant/jsonrpc"
-    "github.com/viant/jsonrpc/transport"
-    "github.com/viant/jsonrpc/transport/server/http/sse"
+    "github.com/eberle1080/jsonrpc"
+    "github.com/eberle1080/jsonrpc/transport"
+    "github.com/eberle1080/jsonrpc/transport/server/http/sse"
     "net/http"
 )
 

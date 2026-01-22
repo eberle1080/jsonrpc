@@ -1,9 +1,9 @@
 package sse
 
 import (
-	"github.com/viant/jsonrpc/transport/server/auth"
-	"github.com/viant/jsonrpc/transport/server/base"
-	"github.com/viant/jsonrpc/transport/server/http/session"
+	"github.com/eberle1080/jsonrpc/transport/server/auth"
+	"github.com/eberle1080/jsonrpc/transport/server/base"
+	"github.com/eberle1080/jsonrpc/transport/server/http/session"
 	"time"
 )
 

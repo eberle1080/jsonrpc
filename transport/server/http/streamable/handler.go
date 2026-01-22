@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/viant/jsonrpc"
-	"github.com/viant/jsonrpc/transport"
-	authpkg "github.com/viant/jsonrpc/transport/server/auth"
-	"github.com/viant/jsonrpc/transport/server/base"
-	"github.com/viant/jsonrpc/transport/server/http/common"
-	"github.com/viant/jsonrpc/transport/server/http/session"
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
+	authpkg "github.com/eberle1080/jsonrpc/transport/server/auth"
+	"github.com/eberle1080/jsonrpc/transport/server/base"
+	"github.com/eberle1080/jsonrpc/transport/server/http/common"
+	"github.com/eberle1080/jsonrpc/transport/server/http/session"
 	"io"
 	"net/http"
 	"strconv"
@@ -176,7 +176,11 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Block until client closes, then mark session detached for quick reconnect.
-	<-r.Context().Done()
+	// Check if Done() is nil to prevent deadlock (nil channel blocks forever)
+	ctx := r.Context()
+	if ctx.Done() != nil {
+		<-ctx.Done()
+	}
 	aSession.MarkDetached()
 	aSession.Writer = nil
 }

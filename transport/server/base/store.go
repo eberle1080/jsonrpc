@@ -1,6 +1,6 @@
 package base
 
-import "github.com/viant/jsonrpc/internal/collection"
+import "github.com/eberle1080/jsonrpc/internal/collection"
 
 // SessionStore abstracts session persistence.
 // Default implementation is in-memory; custom stores (e.g., Redis) can implement this interface.

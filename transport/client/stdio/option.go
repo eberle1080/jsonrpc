@@ -1,8 +1,8 @@
 package stdio
 
 import (
-	"github.com/viant/jsonrpc"
-	"github.com/viant/jsonrpc/transport"
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
 	"github.com/viant/scy/cred/secret"
 	"time"
 )

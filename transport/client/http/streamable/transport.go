@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/viant/jsonrpc"
+	"github.com/eberle1080/jsonrpc"
 )
 
 // Transport implements client side sender for the streaming HTTP transport. It

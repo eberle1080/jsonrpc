@@ -1,8 +1,8 @@
 package streamable
 
 import (
-	"github.com/viant/jsonrpc"
-	"github.com/viant/jsonrpc/transport"
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
 	"net/http"
 	"time"
 )

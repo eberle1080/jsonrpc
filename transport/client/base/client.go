@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/viant/jsonrpc"
-	"github.com/viant/jsonrpc/transport"
-	"github.com/viant/jsonrpc/transport/base"
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
+	"github.com/eberle1080/jsonrpc/transport/base"
 )
 
 type Client struct {

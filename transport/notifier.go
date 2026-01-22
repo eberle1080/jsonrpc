@@ -2,7 +2,7 @@ package transport
 
 import (
 	"context"
-	"github.com/viant/jsonrpc"
+	"github.com/eberle1080/jsonrpc"
 )
 
 // Notifier represents a notification handler

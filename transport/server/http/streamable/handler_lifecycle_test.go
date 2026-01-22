@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/viant/jsonrpc"
-	"github.com/viant/jsonrpc/transport"
-	"github.com/viant/jsonrpc/transport/server/base"
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
+	"github.com/eberle1080/jsonrpc/transport/server/base"
 )
 
 // serverHandler implements transport.Handler with no-ops.

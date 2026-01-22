@@ -2,7 +2,7 @@ package base
 
 import (
 	"encoding/json"
-	"github.com/viant/jsonrpc"
+	"github.com/eberle1080/jsonrpc"
 )
 
 // MessageType returns message type
