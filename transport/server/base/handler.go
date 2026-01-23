@@ -39,6 +39,25 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 
 		response := &jsonrpc.Response{Id: request.Id, Jsonrpc: request.Jsonrpc}
 		ctx = context.WithValue(ctx, jsonrpc.RequestIdKey, request.Id)
+		if session.Handler == nil {
+			response.Error = jsonrpc.NewInternalError("session handler is nil - handler initialization may have failed", nil)
+			if output != nil {
+				if response.Error != nil {
+					response.Result = nil
+				}
+				data, err := json.Marshal(response)
+				if err != nil {
+					if e.Logger != nil {
+						e.Logger.Errorf("failed to encode error response: %v", err)
+					}
+					return
+				}
+				output.Write(data)
+			} else {
+				session.SendResponse(ctx, response)
+			}
+			return
+		}
 		session.Handler.Serve(ctx, request, response)
 		if output != nil {
 			if response.Error != nil {

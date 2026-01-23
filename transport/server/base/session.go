@@ -209,7 +209,15 @@ func NewSession(ctx context.Context, id string, writer io.Writer, newHandler tra
 		State:         SessionStateActive,
 		WriterPresent: writer != nil,
 	}
-	ret.Handler = newHandler(ctx, NewTransport(ret.RoundTrips, ret.SendData, ret))
+	if newHandler == nil {
+		fmt.Printf("WARNING: NewSession called with nil newHandler for session %s\n", id)
+		ret.Handler = nil
+	} else {
+		ret.Handler = newHandler(ctx, NewTransport(ret.RoundTrips, ret.SendData, ret))
+		if ret.Handler == nil {
+			fmt.Printf("WARNING: newHandler returned nil handler for session %s\n", id)
+		}
+	}
 	for _, option := range options {
 		option(ret)
 	}
