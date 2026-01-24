@@ -11,10 +11,10 @@ import (
 // SessionStore abstracts session persistence.
 // Default implementation is in-memory; custom stores (e.g., Redis) can implement this interface.
 type SessionStore interface {
-	Get(id string) (*Session, bool)
-	Put(id string, s *Session)
-	Delete(id string)
-	Range(func(id string, s *Session) bool)
+	Get(ctx context.Context, id string) (*Session, bool)
+	Put(ctx context.Context, id string, s *Session)
+	Delete(ctx context.Context, id string)
+	Range(ctx context.Context, f func(id string, s *Session) bool)
 	// GetOrCreate retrieves a session or creates one if it doesn't exist.
 	// The newHandler factory is called to initialize the Handler for new sessions.
 	GetOrCreate(ctx context.Context, id string, writer io.Writer, newHandler transport.NewHandler) *Session
@@ -25,10 +25,12 @@ type memorySessionStore struct {
 	m *collection.SyncMap[string, *Session]
 }
 
-func (s *memorySessionStore) Get(id string) (*Session, bool) { return s.m.Get(id) }
-func (s *memorySessionStore) Put(id string, v *Session)      { s.m.Put(id, v) }
-func (s *memorySessionStore) Delete(id string)               { s.m.Delete(id) }
-func (s *memorySessionStore) Range(f func(string, *Session) bool) {
+func (s *memorySessionStore) Get(ctx context.Context, id string) (*Session, bool) {
+	return s.m.Get(id)
+}
+func (s *memorySessionStore) Put(ctx context.Context, id string, v *Session) { s.m.Put(id, v) }
+func (s *memorySessionStore) Delete(ctx context.Context, id string)          { s.m.Delete(id) }
+func (s *memorySessionStore) Range(ctx context.Context, f func(string, *Session) bool) {
 	s.m.Range(f)
 }
 

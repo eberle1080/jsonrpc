@@ -189,7 +189,7 @@ func (h *Handler) handleDELETE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("missing %s", h.SessionLocation.Name), http.StatusBadRequest)
 		return
 	}
-	h.base.Sessions.Delete(sessionID)
+	h.base.Sessions.Delete(r.Context(), sessionID)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -206,7 +206,7 @@ func (h *Handler) initHandshake(w http.ResponseWriter, r *http.Request) {
 	base.WithEventBuffer(h.Options.MaxEventBuffer)(aSession)
 	base.WithEventOverflowPolicy(h.Options.OverflowPolicy)(aSession)
 
-	h.base.Sessions.Put(aSession.Id, aSession)
+	h.base.Sessions.Put(ctx, aSession.Id, aSession)
 	// return session id at the configured location; for header we always set header
 	// and use the configured header name
 	if h.SessionLocation != nil && h.SessionLocation.Kind == "header" {
@@ -453,7 +453,7 @@ func (h *Handler) runSweeper() {
 	for range ticker.C {
 		now := time.Now()
 		var toDelete []string
-		h.base.Sessions.Range(func(id string, sess *base.Session) bool {
+		h.base.Sessions.Range(context.TODO(), func(id string, sess *base.Session) bool {
 			remove := false
 			// Max lifetime
 			if h.Options.MaxLifetime > 0 && now.Sub(sess.CreatedAt) > h.Options.MaxLifetime {
@@ -489,14 +489,14 @@ func (h *Handler) runSweeper() {
 		})
 		for _, id := range toDelete {
 			if h.Options.OnSessionClose != nil {
-				if sess, ok := h.base.Sessions.Get(id); ok {
+				if sess, ok := h.base.Sessions.Get(context.TODO(), id); ok {
 					func() {
 						defer func() { _ = recover() }()
 						h.Options.OnSessionClose(sess)
 					}()
 				}
 			}
-			h.base.Sessions.Delete(id)
+			h.base.Sessions.Delete(context.TODO(), id)
 		}
 	}
 }

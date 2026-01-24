@@ -119,7 +119,7 @@ func TestServer_ListenAndServe(t *testing.T) {
 			)
 
 			// Replace the stdout writer in the session with our buffer
-			session, ok := server.base.Sessions.Get(sessionKey)
+			session, ok := server.base.Sessions.Get(ctx, sessionKey)
 			if !ok {
 				t.Fatalf("Session not found")
 			}

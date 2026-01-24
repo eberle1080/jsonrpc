@@ -44,7 +44,7 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodDelete:
 		if sessionId, _ := s.locator.Locate(s.StreamingSessionLocation, r); sessionId != "" {
-			s.base.Sessions.Delete(sessionId)
+			s.base.Sessions.Delete(r.Context(), sessionId)
 			w.WriteHeader(http.StatusOK)
 		}
 
@@ -364,7 +364,7 @@ func (s *Handler) initSessionHandshake(ctx context.Context, r *http.Request, w h
 	if _, err := writer.Write([]byte(payload)); err != nil {
 		return nil, err
 	}
-	s.base.Sessions.Put(aSession.Id, aSession)
+	s.base.Sessions.Put(ctx, aSession.Id, aSession)
 	return aSession, nil
 }
 
@@ -440,7 +440,7 @@ func (s *Handler) runSweeper() {
 	for range ticker.C {
 		now := time.Now()
 		var toDelete []string
-		s.base.Sessions.Range(func(id string, sess *base.Session) bool {
+		s.base.Sessions.Range(context.TODO(), func(id string, sess *base.Session) bool {
 			remove := false
 			// Max lifetime
 			if s.Options.MaxLifetime > 0 && now.Sub(sess.CreatedAt) > s.Options.MaxLifetime {
@@ -476,14 +476,14 @@ func (s *Handler) runSweeper() {
 		})
 		for _, id := range toDelete {
 			if s.Options.OnSessionClose != nil {
-				if sess, ok := s.base.Sessions.Get(id); ok {
+				if sess, ok := s.base.Sessions.Get(context.TODO(), id); ok {
 					func() {
 						defer func() { _ = recover() }()
 						s.Options.OnSessionClose(sess)
 					}()
 				}
 			}
-			s.base.Sessions.Delete(id)
+			s.base.Sessions.Delete(context.TODO(), id)
 		}
 	}
 }

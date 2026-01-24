@@ -52,7 +52,7 @@ func (t *Server) ListenAndServe() error {
 			}
 			return err
 		}
-		session, ok := t.base.Sessions.Get(sessionKey)
+		session, ok := t.base.Sessions.Get(t.ctx, sessionKey)
 		if !ok {
 			return fmt.Errorf("session not found")
 		}
@@ -107,7 +107,7 @@ func New(ctx context.Context, newHandler transport.NewHandler, options ...Option
 	}
 	aSession := base.NewSession(ctx, sessionKey, os.Stdout, newHandler, ret.options...)
 	ctx = context.WithValue(ctx, jsonrpc.SessionKey, aSession)
-	ret.base.Sessions.Put(sessionKey, aSession)
+	ret.base.Sessions.Put(ctx, sessionKey, aSession)
 	// Apply all options
 	for _, opt := range options {
 		opt(ret)

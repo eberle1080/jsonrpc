@@ -67,7 +67,7 @@ func TestStreamable_DetachReconnectAndCleanup(t *testing.T) {
 
 	// Wait for handler to mark detached
 	time.Sleep(60 * time.Millisecond)
-	sess, ok := h.base.Sessions.Get(sid)
+	sess, ok := h.base.Sessions.Get(context.TODO(), sid)
 	if !ok {
 		t.Fatalf("session not found after detach")
 	}
@@ -92,7 +92,7 @@ func TestStreamable_DetachReconnectAndCleanup(t *testing.T) {
 
 	// Now wait for grace + cleanup to remove session
 	time.Sleep(400 * time.Millisecond)
-	if _, ok := h.base.Sessions.Get(sid); ok {
+	if _, ok := h.base.Sessions.Get(context.TODO(), sid); ok {
 		t.Fatalf("expected session to be cleaned after grace")
 	}
 }
@@ -124,7 +124,7 @@ func TestStreamable_IdleTTLAndMaxLifetime(t *testing.T) {
 		t.Fatalf("missing session id header %s", defaultSessionHeaderKey)
 	}
 
-	sess, ok := h.base.Sessions.Get(sid)
+	sess, ok := h.base.Sessions.Get(context.TODO(), sid)
 	if !ok {
 		t.Fatalf("session not found after handshake")
 	}
@@ -132,7 +132,7 @@ func TestStreamable_IdleTTLAndMaxLifetime(t *testing.T) {
 	// Force idle by backdating LastSeen
 	sess.LastSeen = time.Now().Add(-2 * time.Second)
 	time.Sleep(120 * time.Millisecond) // > IdleTTL and > CleanupInterval
-	if _, ok := h.base.Sessions.Get(sid); ok {
+	if _, ok := h.base.Sessions.Get(context.TODO(), sid); ok {
 		t.Fatalf("expected session removed due to IdleTTL")
 	}
 
@@ -146,14 +146,14 @@ func TestStreamable_IdleTTLAndMaxLifetime(t *testing.T) {
 	if sid2 == "" {
 		t.Fatalf("missing session id header")
 	}
-	sess2, ok := h.base.Sessions.Get(sid2)
+	sess2, ok := h.base.Sessions.Get(context.TODO(), sid2)
 	if !ok {
 		t.Fatalf("session2 not found after handshake")
 	}
 	sess2.CreatedAt = time.Now().Add(-1 * time.Hour)
 
 	time.Sleep(80 * time.Millisecond) // allow sweeper
-	if _, ok := h.base.Sessions.Get(sid2); ok {
+	if _, ok := h.base.Sessions.Get(context.TODO(), sid2); ok {
 		t.Fatalf("expected session removed due to MaxLifetime")
 	}
 }
