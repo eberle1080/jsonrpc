@@ -7,8 +7,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/viant/afs/url"
 	"github.com/eberle1080/jsonrpc"
+	"github.com/viant/afs/url"
 )
 
 type Transport struct {

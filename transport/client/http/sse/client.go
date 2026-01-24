@@ -4,16 +4,17 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/viant/afs/url"
-	"github.com/eberle1080/jsonrpc"
-	"github.com/eberle1080/jsonrpc/transport"
-	"github.com/eberle1080/jsonrpc/transport/client/base"
 	"io"
 	"net/http"
 	stdurl "net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
+	"github.com/eberle1080/jsonrpc/transport/client/base"
+	"github.com/viant/afs/url"
 )
 
 type Client struct {
@@ -73,7 +74,6 @@ func (c *Client) start(ctx context.Context) error {
 	go c.listenForMessages(ctx, reader)
 
 	return nil
-
 }
 
 func (c *Client) Notify(ctx context.Context, request *jsonrpc.Notification) error {

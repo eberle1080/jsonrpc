@@ -3,6 +3,7 @@ package base
 import (
 	"context"
 	"fmt"
+
 	"github.com/eberle1080/jsonrpc"
 )
 
@@ -16,5 +17,5 @@ func (h *Handler) Serve(_ context.Context, request *jsonrpc.Request, response *j
 }
 
 func (h *Handler) OnNotification(_ context.Context, _ *jsonrpc.Notification) {
-	//ignore
+	// ignore
 }

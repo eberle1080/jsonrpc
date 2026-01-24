@@ -2,6 +2,7 @@ package base
 
 import (
 	"encoding/json"
+
 	"github.com/eberle1080/jsonrpc"
 )
 

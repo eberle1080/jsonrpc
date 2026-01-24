@@ -3,14 +3,15 @@ package stdio
 import (
 	"context"
 	"fmt"
-	"github.com/viant/gosh/runner"
-	"github.com/eberle1080/jsonrpc"
-	"github.com/eberle1080/jsonrpc/transport"
-	"github.com/eberle1080/jsonrpc/transport/client/base"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
+	"github.com/eberle1080/jsonrpc/transport/client/base"
+	"github.com/viant/gosh/runner"
 )
 
 // mockRunner is a mock implementation of runner.Runner for testing
@@ -399,7 +400,6 @@ func TestClient_HandleMessage(t *testing.T) {
 
 // TestClient_Options tests the client options
 func TestClient_Options(t *testing.T) {
-
 	t.Run("WithArguments", func(t *testing.T) {
 		client, err := New("test", WithArguments("arg1", "arg2"))
 		if err != nil {

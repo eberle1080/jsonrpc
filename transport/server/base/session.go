@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/eberle1080/jsonrpc"
-	"github.com/eberle1080/jsonrpc/transport"
 	"io"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
+	"github.com/google/uuid"
 )
 
 type Session struct {
@@ -105,7 +106,6 @@ func (s *Session) SendRequest(ctx context.Context, request *jsonrpc.Request) {
 		return
 	}
 	s.SendData(ctx, data)
-
 }
 
 func (s *Session) sendNotification(ctx context.Context, notification *jsonrpc.Notification) error {

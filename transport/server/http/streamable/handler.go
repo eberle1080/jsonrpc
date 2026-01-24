@@ -5,17 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/eberle1080/jsonrpc"
 	"github.com/eberle1080/jsonrpc/transport"
 	authpkg "github.com/eberle1080/jsonrpc/transport/server/auth"
 	"github.com/eberle1080/jsonrpc/transport/server/base"
 	"github.com/eberle1080/jsonrpc/transport/server/http/common"
 	"github.com/eberle1080/jsonrpc/transport/server/http/session"
-	"io"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
 )
 
 // Default values following the MCP spec.
@@ -115,11 +116,8 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	aSession, ok := h.base.Sessions.Get(sessionID)
-	if !ok {
-		http.Error(w, fmt.Sprintf("session '%s' not found", sessionID), http.StatusNotFound)
-		return
-	}
+	// Get or create session; writer will be attached when we mark it active
+	aSession := h.base.Sessions.GetOrCreate(sessionID, r.Context(), io.Discard, h.newHandler)
 
 	// last event id support (reserved; implemented in resumability step)
 	_ = r.Header.Get("Last-Event-ID")
@@ -220,15 +218,12 @@ func (h *Handler) initHandshake(w http.ResponseWriter, r *http.Request) {
 	// do not set transport session cookies; MCP session id is header-only
 	h.handleMessage(w, r, aSession.Id)
 
-	//w.WriteHeader(http.StatusCreated)
+	// w.WriteHeader(http.StatusCreated)
 }
 
 func (h *Handler) handleMessage(w http.ResponseWriter, r *http.Request, sessionID string) {
-	aSession, ok := h.base.Sessions.Get(sessionID)
-	if !ok {
-		http.Error(w, fmt.Sprintf("session '%s' not found", sessionID), http.StatusNotFound)
-		return
-	}
+	// Get or create session; for messages, we don't need a live writer yet
+	aSession := h.base.Sessions.GetOrCreate(sessionID, r.Context(), io.Discard, h.newHandler)
 
 	data, err := io.ReadAll(r.Body)
 	if err != nil {

@@ -173,7 +173,7 @@ type Response struct {
 	// Jsonrpc corresponds to the JSON schema field "jsonrpc".
 	Jsonrpc string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
 
-	//Error
+	// Error
 	Error *Error `json:"error,omitempty" yaml:"error,omitempty" mapstructure:"error"`
 
 	// Result corresponds to the JSON schema field "result".

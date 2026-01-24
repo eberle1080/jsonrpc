@@ -6,10 +6,8 @@ import (
 	"time"
 )
 
-var (
-	// ErrNotFound indicates no grant was found for the given id.
-	ErrNotFound = errors.New("auth grant not found")
-)
+// ErrNotFound indicates no grant was found for the given id.
+var ErrNotFound = errors.New("auth grant not found")
 
 // Store defines the contract for a durable BFF authentication grant store.
 // Implementations should be safe for concurrent use and resilient across restarts.

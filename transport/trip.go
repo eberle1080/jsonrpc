@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/eberle1080/jsonrpc"
 	"sync/atomic"
 	"time"
+
+	"github.com/eberle1080/jsonrpc"
 )
 
 // RoundTrip represents a trip

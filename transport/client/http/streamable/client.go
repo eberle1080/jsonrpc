@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/viant/afs/url"
 	"github.com/eberle1080/jsonrpc"
 	"github.com/eberle1080/jsonrpc/transport"
 	"github.com/eberle1080/jsonrpc/transport/client/base"
-	"net/http/cookiejar"
-	"sync"
+	"github.com/viant/afs/url"
 )
 
 const sseMime = "text/event-stream"

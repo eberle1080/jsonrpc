@@ -5,11 +5,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"os"
+
 	"github.com/eberle1080/jsonrpc"
 	"github.com/eberle1080/jsonrpc/transport"
 	"github.com/eberle1080/jsonrpc/transport/server/base"
-	"io"
-	"os"
 )
 
 const sessionKey = "stdio"
@@ -89,7 +90,6 @@ func (t *Server) readLine(ctx context.Context) (string, error) {
 
 // New creates a new stdio transport instance with the provided handler and options
 func New(ctx context.Context, newHandler transport.NewHandler, options ...Option) *Server {
-
 	if ctx == nil {
 		ctx = context.Background()
 	}

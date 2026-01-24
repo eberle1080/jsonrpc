@@ -1,11 +1,12 @@
 package streamable
 
 import (
+	"net/http"
+	"time"
+
 	"github.com/eberle1080/jsonrpc/transport/server/auth"
 	"github.com/eberle1080/jsonrpc/transport/server/base"
 	"github.com/eberle1080/jsonrpc/transport/server/http/session"
-	"net/http"
-	"time"
 )
 
 // Options exposes configurable attributes of the handler.

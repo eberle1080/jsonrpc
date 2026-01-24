@@ -76,7 +76,6 @@ func NewError(
 	message string,
 	data interface{},
 ) *Error {
-
 	var rawData []byte
 
 	if data != nil {

@@ -1,10 +1,11 @@
 package stdio
 
 import (
+	"time"
+
 	"github.com/eberle1080/jsonrpc"
 	"github.com/eberle1080/jsonrpc/transport"
 	"github.com/viant/scy/cred/secret"
-	"time"
 )
 
 type Option func(c *Client)

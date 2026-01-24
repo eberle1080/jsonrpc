@@ -3,8 +3,9 @@ package stdio
 import (
 	"context"
 	"fmt"
-	"github.com/viant/gosh/runner"
 	"sync"
+
+	"github.com/viant/gosh/runner"
 )
 
 type Transport struct {

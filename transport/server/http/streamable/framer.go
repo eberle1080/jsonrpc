@@ -31,7 +31,6 @@ func frameJSON(data []byte) []byte {
 // every JSON message so the stream can be resumed with Last-Event-ID.
 func framerWithSession(s *base.Session) base.FrameMessage {
 	return func(data []byte) []byte {
-
 		requestID := s.NextRequestID()
 		id, _ := jsonrpc.AsRequestIntId(requestID)
 		// ensure data is trimmed to single line (no newline)

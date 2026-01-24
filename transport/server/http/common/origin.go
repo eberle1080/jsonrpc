@@ -61,6 +61,7 @@ func isLocalhost(h string) bool {
 	h = strings.ToLower(stripPort(h))
 	return h == "localhost" || strings.HasSuffix(h, ".localhost")
 }
+
 func stripPort(h string) string {
 	if i := strings.IndexByte(h, ':'); i > -1 {
 		return h[:i]

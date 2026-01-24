@@ -3,9 +3,10 @@ package base
 import (
 	"context"
 	"encoding/json"
+	"time"
+
 	"github.com/eberle1080/jsonrpc"
 	"github.com/eberle1080/jsonrpc/transport"
-	"time"
 )
 
 // Transport represents a Transport

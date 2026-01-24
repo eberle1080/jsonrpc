@@ -1,8 +1,9 @@
 package auth
 
 import (
-	"github.com/google/uuid"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Grant represents a durable BFF authentication grant held server-side.

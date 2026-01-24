@@ -2,8 +2,9 @@ package stdio
 
 import (
 	"fmt"
-	"github.com/eberle1080/jsonrpc"
 	"io"
+
+	"github.com/eberle1080/jsonrpc"
 )
 
 // Logger provides simple logging functionality

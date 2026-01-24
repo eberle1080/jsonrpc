@@ -1,10 +1,11 @@
 package streamable
 
 import (
-	"github.com/eberle1080/jsonrpc"
-	"github.com/eberle1080/jsonrpc/transport"
 	"net/http"
 	"time"
+
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
 )
 
 // Option mutates Client.

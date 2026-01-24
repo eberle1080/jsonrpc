@@ -5,18 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/eberle1080/jsonrpc"
-	"github.com/eberle1080/jsonrpc/transport"
-	authpkg "github.com/eberle1080/jsonrpc/transport/server/auth"
-	"github.com/eberle1080/jsonrpc/transport/server/base"
-	"github.com/eberle1080/jsonrpc/transport/server/http/common"
-	"github.com/eberle1080/jsonrpc/transport/server/http/session"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
+	authpkg "github.com/eberle1080/jsonrpc/transport/server/auth"
+	"github.com/eberle1080/jsonrpc/transport/server/base"
+	"github.com/eberle1080/jsonrpc/transport/server/http/common"
+	"github.com/eberle1080/jsonrpc/transport/server/http/session"
 )
 
 // Handler represents a server-side newNandler for SSE and message transport.
@@ -103,22 +104,19 @@ func (s *Handler) handleMessage(w http.ResponseWriter, r *http.Request) {
 	if sessionId == "" {
 		aSession = base.NewSession(ctx, "", common.NewFlushWriter(w), s.newHandler, s.options...)
 	} else {
-		var ok bool
-		if aSession, ok = s.base.Sessions.Get(sessionId); !ok {
-			http.Error(w, fmt.Sprintf("session '%s' not found", sessionId), http.StatusNotFound)
-			return
-		}
+		// Get or create session; writer is not needed for message handling
+		aSession = s.base.Sessions.GetOrCreate(sessionId, ctx, io.Discard, s.newHandler)
 	}
 	buffer := bytes.Buffer{}
 	ctx = context.WithValue(ctx, jsonrpc.SessionKey, aSession)
 	s.base.HandleMessage(ctx, aSession, data, &buffer)
 
-	if buffer.Len() == 0 { //notification no response
+	if buffer.Len() == 0 { // notification no response
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 
-	if useStreaming { //forward compatibility
+	if useStreaming { // forward compatibility
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set(s.StreamingSessionLocation.Name, aSession.Id)
 		w.WriteHeader(http.StatusOK)
@@ -246,62 +244,62 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if sid != "" {
-			if aSession, ok := s.base.Sessions.Get(sid); ok {
-				// reattach writer and enable SSE framing/buffer
-				aSession.MarkActiveWithWriter(writer)
-				base.WithFramer(frameSSE)(aSession)
-				base.WithEventBuffer(s.Options.MaxEventBuffer)(aSession)
-				base.WithEventOverflowPolicy(s.Options.OverflowPolicy)(aSession)
-				base.WithSSE()(aSession)
+			// Get or create session and attach writer for streaming
+			aSession := s.base.Sessions.GetOrCreate(sid, ctx, writer, s.newHandler)
+			// reattach writer and enable SSE framing/buffer
+			aSession.MarkActiveWithWriter(writer)
+			base.WithFramer(frameSSE)(aSession)
+			base.WithEventBuffer(s.Options.MaxEventBuffer)(aSession)
+			base.WithEventOverflowPolicy(s.Options.OverflowPolicy)(aSession)
+			base.WithSSE()(aSession)
 
-				// Resumability: replay after Last-Event-ID
-				if last := strings.TrimSpace(r.Header.Get("Last-Event-ID")); last != "" {
-					if v, err := strconv.ParseUint(last, 10, 64); err == nil {
-						if msgs := aSession.EventsAfter(v); len(msgs) > 0 {
-							for _, m := range msgs {
-								_, _ = aSession.Writer.Write(m)
-							}
+			// Resumability: replay after Last-Event-ID
+			if last := strings.TrimSpace(r.Header.Get("Last-Event-ID")); last != "" {
+				if v, err := strconv.ParseUint(last, 10, 64); err == nil {
+					if msgs := aSession.EventsAfter(v); len(msgs) > 0 {
+						for _, m := range msgs {
+							_, _ = aSession.Writer.Write(m)
 						}
 					}
 				}
+			}
 
-				// Optional keepalive with generation guard
-				var stop chan struct{}
-				if s.Options.KeepAliveInterval > 0 {
-					gen := aSession.WriterGeneration()
-					stop = make(chan struct{})
-					go func(gen uint64) {
-						ticker := time.NewTicker(s.Options.KeepAliveInterval)
-						defer ticker.Stop()
-						for {
-							// stop if writer has been reattached
+			// Optional keepalive with generation guard
+			var stop chan struct{}
+			if s.Options.KeepAliveInterval > 0 {
+				gen := aSession.WriterGeneration()
+				stop = make(chan struct{})
+				go func(gen uint64) {
+					ticker := time.NewTicker(s.Options.KeepAliveInterval)
+					defer ticker.Stop()
+					for {
+						// stop if writer has been reattached
+						if aSession.WriterGeneration() != gen {
+							return
+						}
+						select {
+						case <-ticker.C:
 							if aSession.WriterGeneration() != gen {
 								return
 							}
-							select {
-							case <-ticker.C:
-								if aSession.WriterGeneration() != gen {
-									return
-								}
-								aSession.Touch()
-								_, _ = aSession.Writer.Write([]byte(": keepalive\n\n"))
-							case <-stop:
-								return
-							}
+							aSession.Touch()
+							_, _ = aSession.Writer.Write([]byte(": keepalive\n\n"))
+						case <-stop:
+							return
 						}
-					}(gen)
-				}
-
-				<-r.Context().Done()
-				if stop != nil {
-					close(stop)
-				}
-				// mark session detached for potential quick reconnect
-				aSession.MarkDetached()
-				aSession.Writer = nil
-				cancelFun()
-				return
+					}
+				}(gen)
 			}
+
+			<-r.Context().Done()
+			if stop != nil {
+				close(stop)
+			}
+			// mark session detached for potential quick reconnect
+			aSession.MarkDetached()
+			aSession.Writer = nil
+			cancelFun()
+			return
 		}
 	}
 

@@ -88,7 +88,7 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 		}
 		aTrip.SetResponse(response)
 
-		//TODO move fmt.Printf to a logger to expose to implementers
+		// TODO move fmt.Printf to a logger to expose to implementers
 	case jsonrpc.MessageTypeNotification:
 		notification := &jsonrpc.Notification{}
 		if err := json.Unmarshal(data, notification); err != nil {

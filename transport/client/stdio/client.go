@@ -3,16 +3,17 @@ package stdio
 import (
 	"context"
 	"fmt"
-	"github.com/viant/gosh/runner"
-	"github.com/viant/gosh/runner/local"
-	"github.com/viant/gosh/runner/ssh"
+	"strings"
+	"time"
+
 	"github.com/eberle1080/jsonrpc"
 	transport2 "github.com/eberle1080/jsonrpc/transport"
 	"github.com/eberle1080/jsonrpc/transport/client/base"
+	"github.com/viant/gosh/runner"
+	"github.com/viant/gosh/runner/local"
+	"github.com/viant/gosh/runner/ssh"
 	"github.com/viant/scy/cred/secret"
 	cssh "golang.org/x/crypto/ssh"
-	"strings"
-	"time"
 )
 
 // Client represent a base
@@ -42,7 +43,7 @@ func (c *Client) start(ctx context.Context) error {
 	if err := c.ensureSSHConfig(ctx); err != nil {
 		return err // ensure SSH config is set up before initializing the service
 	}
-	var options = []runner.Option{
+	options := []runner.Option{
 		runner.AsPipeline(),
 	}
 	if c.sshConfig != nil {
