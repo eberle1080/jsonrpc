@@ -105,7 +105,7 @@ func (s *Handler) handleMessage(w http.ResponseWriter, r *http.Request) {
 		aSession = base.NewSession(ctx, "", common.NewFlushWriter(w), s.newHandler, s.options...)
 	} else {
 		// Get or create session; writer is not needed for message handling
-		aSession = s.base.Sessions.GetOrCreate(sessionId, ctx, io.Discard, s.newHandler)
+		aSession = s.base.Sessions.GetOrCreate(ctx, sessionId, io.Discard, s.newHandler)
 	}
 	buffer := bytes.Buffer{}
 	ctx = context.WithValue(ctx, jsonrpc.SessionKey, aSession)
@@ -245,7 +245,7 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 		}
 		if sid != "" {
 			// Get or create session and attach writer for streaming
-			aSession := s.base.Sessions.GetOrCreate(sid, ctx, writer, s.newHandler)
+			aSession := s.base.Sessions.GetOrCreate(ctx, sid, writer, s.newHandler)
 			// reattach writer and enable SSE framing/buffer
 			aSession.MarkActiveWithWriter(writer)
 			base.WithFramer(frameSSE)(aSession)

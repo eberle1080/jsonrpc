@@ -117,7 +117,7 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get or create session; writer will be attached when we mark it active
-	aSession := h.base.Sessions.GetOrCreate(sessionID, r.Context(), io.Discard, h.newHandler)
+	aSession := h.base.Sessions.GetOrCreate(r.Context(), sessionID, io.Discard, h.newHandler)
 
 	// last event id support (reserved; implemented in resumability step)
 	_ = r.Header.Get("Last-Event-ID")
@@ -223,7 +223,7 @@ func (h *Handler) initHandshake(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleMessage(w http.ResponseWriter, r *http.Request, sessionID string) {
 	// Get or create session; for messages, we don't need a live writer yet
-	aSession := h.base.Sessions.GetOrCreate(sessionID, r.Context(), io.Discard, h.newHandler)
+	aSession := h.base.Sessions.GetOrCreate(r.Context(), sessionID, io.Discard, h.newHandler)
 
 	data, err := io.ReadAll(r.Body)
 	if err != nil {

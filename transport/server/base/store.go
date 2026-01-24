@@ -17,7 +17,7 @@ type SessionStore interface {
 	Range(func(id string, s *Session) bool)
 	// GetOrCreate retrieves a session or creates one if it doesn't exist.
 	// The newHandler factory is called to initialize the Handler for new sessions.
-	GetOrCreate(id string, ctx context.Context, writer io.Writer, newHandler transport.NewHandler) *Session
+	GetOrCreate(ctx context.Context, id string, writer io.Writer, newHandler transport.NewHandler) *Session
 }
 
 // memorySessionStore is an in-memory store backed by SyncMap.
@@ -32,7 +32,7 @@ func (s *memorySessionStore) Range(f func(string, *Session) bool) {
 	s.m.Range(f)
 }
 
-func (s *memorySessionStore) GetOrCreate(id string, ctx context.Context, writer io.Writer, newHandler transport.NewHandler) *Session {
+func (s *memorySessionStore) GetOrCreate(ctx context.Context, id string, writer io.Writer, newHandler transport.NewHandler) *Session {
 	if existing, ok := s.m.Get(id); ok {
 		return existing
 	}
