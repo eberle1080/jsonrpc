@@ -30,6 +30,8 @@ func (m *SyncMap[K, V]) Delete(k K) {
 }
 
 func (m *SyncMap[K, V]) Range(f func(key K, value V) bool) {
+	m.mux.RLock()
+	defer m.mux.RUnlock()
 	for k, v := range m.m {
 		// call the function with the key and value
 		if !f(k, v) {
