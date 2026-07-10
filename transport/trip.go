@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/viant/jsonrpc"
-	"sync/atomic"
+	"reflect"
+	"sync"
 	"time"
 )
 
@@ -57,6 +58,7 @@ func (t *RoundTrip) SetResponse(response *jsonrpc.Response) {
 
 // RoundTrips represents a collection of trips
 type RoundTrips struct {
+	mu       sync.Mutex
 	counter  uint64
 	Ring     []*RoundTrip
 	next     uint64
@@ -66,18 +68,23 @@ type RoundTrips struct {
 
 // CloseWithError closes trips with error
 func (r *RoundTrips) CloseWithError(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.error = err
 }
 
 // Match matches a trip by id
 func (r *RoundTrips) Match(id any) (*RoundTrip, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.error != nil {
 		return nil, r.error
 	}
 	// Start scanning from a rotating index but wrap around to cover entire ring.
 	start := 0
 	if r.capacity > 0 {
-		start = int(atomic.AddUint64(&r.next, 1)-1) % r.capacity
+		r.next++
+		start = int(r.next-1) % r.capacity
 	}
 	for k := 0; k < r.capacity; k++ {
 		i := (start + k) % r.capacity
@@ -92,14 +99,24 @@ func (r *RoundTrips) Match(id any) (*RoundTrip, error) {
 
 // Add adds a new trip
 func (r *RoundTrips) Add(request *jsonrpc.Request) (*RoundTrip, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.error != nil {
 		return nil, r.error
 	}
 	if r.capacity == 0 {
 		return nil, fmt.Errorf("failed to add request, ring is full")
 	}
+	// A response is matched only by ID, so two active trips with the same ID
+	// would make ownership ambiguous. Reject the second trip instead.
+	for i := 0; i < r.capacity; i++ {
+		if r.Ring[i] != nil && equals(r.Ring[i].Request.Id, request.Id) {
+			return nil, fmt.Errorf("duplicate active request id: %v", request.Id)
+		}
+	}
 	// Find next available slot starting at a rotating index and wrapping around.
-	start := int(atomic.AddUint64(&r.counter, 1)-1) % r.capacity
+	r.counter++
+	start := int(r.counter-1) % r.capacity
 	for k := 0; k < r.capacity; k++ {
 		i := (start + k) % r.capacity
 		if r.Ring[i] == nil {
@@ -113,14 +130,21 @@ func (r *RoundTrips) Add(request *jsonrpc.Request) (*RoundTrip, error) {
 
 // Get returns the trip at the given index
 func (r *RoundTrips) Get(index int) *RoundTrip {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if index < 0 || index >= r.capacity {
 		return nil
 	}
-	return r.Ring[int(r.counter)+index%r.capacity]
+	if r.capacity == 0 {
+		return nil
+	}
+	return r.Ring[index]
 }
 
 // Size returns the size of the trips
 func (r *RoundTrips) Size() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if int(r.counter) < r.capacity {
 		return int(r.counter)
 	}
@@ -137,10 +161,20 @@ func NewRoundTrips(capacity int) *RoundTrips {
 }
 
 func equals(id1 jsonrpc.RequestId, id2 any) bool {
-	id1Value, ok1 := jsonrpc.AsRequestIntId(id1)
-	id2Value, ok2 := jsonrpc.AsRequestIntId(id2)
+	id1Value, ok1 := numericRequestID(id1)
+	id2Value, ok2 := numericRequestID(id2)
 	if ok1 && ok2 {
 		return id1Value == id2Value
 	}
-	return false
+	return reflect.DeepEqual(id1, id2)
+}
+
+func numericRequestID(id any) (int, bool) {
+	switch id.(type) {
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		value, _ := jsonrpc.AsRequestIntId(id)
+		return value, true
+	default:
+		return 0, false
+	}
 }
