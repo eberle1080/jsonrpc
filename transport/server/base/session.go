@@ -41,6 +41,10 @@ type Session struct {
 
 	// writerGen increments on each writer (re)attachment to guard concurrent writers.
 	writerGen uint64
+
+	requestIDGenerator  func() jsonrpc.RequestId
+	roundTripRegistered func(jsonrpc.RequestId, *Session)
+	roundTripCompleted  func(jsonrpc.RequestId, *Session)
 }
 
 // LastRequestID returns the most recently generated request id without mutating the underlying sequence.
@@ -50,6 +54,9 @@ func (s *Session) LastRequestID() jsonrpc.RequestId {
 }
 
 func (s *Session) NextRequestID() jsonrpc.RequestId {
+	if s.requestIDGenerator != nil {
+		return s.requestIDGenerator()
+	}
 	return int(atomic.AddUint64(&s.RequestIdSeq, 1))
 }
 
@@ -213,10 +220,10 @@ func NewSession(ctx context.Context, id string, writer io.Writer, newHandler tra
 		State:         SessionStateActive,
 		WriterPresent: writer != nil,
 	}
-	ret.Handler = newHandler(ctx, NewTransport(ret.RoundTrips, ret.SendData, ret))
 	for _, option := range options {
 		option(ret)
 	}
+	ret.Handler = newHandler(ctx, NewTransport(ret.RoundTrips, ret.SendData, ret))
 	return ret
 }
 

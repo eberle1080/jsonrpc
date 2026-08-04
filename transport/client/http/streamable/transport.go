@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -55,9 +56,18 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	// Keep request/response POSTs synchronous. The long-lived GET stream still
 	// carries server-initiated requests such as sampling, while the final
 	// response for this request is delivered on this POST body.
-	req.Header.Set("Accept", "application/json")
+	if t.c.stateless {
+		req.Header.Set("Accept", "application/json, text/event-stream")
+	} else {
+		req.Header.Set("Accept", "application/json")
+	}
 	for k, v := range t.headers {
 		req.Header[k] = append([]string(nil), v...)
+	}
+	if t.c.requestHeaderProvider != nil {
+		if err := t.c.requestHeaderProvider(ctx, data, req.Header); err != nil {
+			return fmt.Errorf("failed to build request headers: %w", err)
+		}
 	}
 	unlock()
 
@@ -74,11 +84,15 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
+		if isJSONRPCErrorResponse(data, body) {
+			t.c.base.HandleMessage(ctx, body)
+			return nil
+		}
 		return fmt.Errorf("invalid status code: %d: %s", resp.StatusCode, string(body))
 	}
 
-	// If server sent session id on handshake, capture it
-	if sessionID := resp.Header.Get(t.c.sessionHeaderName); sessionID != "" {
+	// If server sent session id on handshake, capture it in stateful mode.
+	if sessionID := resp.Header.Get(t.c.sessionHeaderName); !t.c.stateless && sessionID != "" {
 		// Update known session id and ensure the GET stream is running
 		t.Lock()
 		t.c.sessionID = sessionID
@@ -89,7 +103,7 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 		t.c.ensureStream()
 	}
 
-	if t.c.sessionID == "" {
+	if !t.c.stateless && t.c.sessionID == "" {
 		_ = resp.Body.Close()
 		return fmt.Errorf("handshake missing %s header", t.c.sessionHeaderName)
 	}
@@ -112,4 +126,22 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 		t.c.base.HandleMessage(ctx, body)
 	}
 	return nil
+}
+
+func isJSONRPCErrorResponse(requestData, responseData []byte) bool {
+	var request struct {
+		ID json.RawMessage `json:"id"`
+	}
+	var response struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      json.RawMessage `json:"id"`
+		Error   *jsonrpc.Error  `json:"error"`
+	}
+	if json.Unmarshal(requestData, &request) != nil || len(request.ID) == 0 {
+		return false
+	}
+	if json.Unmarshal(responseData, &response) != nil || response.JSONRPC != jsonrpc.Version || response.Error == nil {
+		return false
+	}
+	return bytes.Equal(bytes.TrimSpace(request.ID), bytes.TrimSpace(response.ID))
 }

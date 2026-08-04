@@ -183,6 +183,83 @@ func TestTransportSendData_PostAcceptsJSONResponse(t *testing.T) {
 	}
 }
 
+func TestTransportSendData_StatelessDoesNotRequireSession(t *testing.T) {
+	var acceptHeader string
+	var routedMethod string
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		acceptHeader = req.Header.Get("Accept")
+		routedMethod = req.Header.Get("X-JSONRPC-Method")
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`)),
+			Request:    req,
+		}, nil
+	})}
+	streamClient := &Client{
+		stateless: true,
+		requestHeaderProvider: func(_ context.Context, body []byte, header http.Header) error {
+			header.Set("X-JSONRPC-Method", "ping")
+			return nil
+		},
+	}
+	baseClient := &clientbase.Client{
+		RunTimeout: time.Second,
+		RoundTrips: transport.NewRoundTrips(10),
+		Handler:    &clientbase.Handler{},
+	}
+	streamClient.base = baseClient
+	transport := &Transport{
+		client:   client,
+		headers:  make(http.Header),
+		endpoint: "http://example.com/mcp",
+		c:        streamClient,
+	}
+	baseClient.Transport = transport
+
+	response, err := baseClient.Send(context.Background(), &jsonrpc.Request{Jsonrpc: jsonrpc.Version, Method: "ping"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response == nil || string(response.Result) != `{"ok":true}` {
+		t.Fatalf("unexpected response: %#v", response)
+	}
+	if acceptHeader != "application/json, text/event-stream" {
+		t.Fatalf("unexpected Accept header: %q", acceptHeader)
+	}
+	if routedMethod != "ping" {
+		t.Fatalf("request header provider was not applied: %q", routedMethod)
+	}
+}
+
+func TestTransportSendData_PreservesJSONRPCErrorOnHTTPBadRequest(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"jsonrpc":"2.0","id":1,"error":{"code":-32020,"message":"header mismatch"}}`)),
+			Request:    req,
+		}, nil
+	})}
+	streamClient := &Client{stateless: true}
+	baseClient := &clientbase.Client{
+		RunTimeout: time.Second,
+		RoundTrips: transport.NewRoundTrips(10),
+		Handler:    &clientbase.Handler{},
+	}
+	streamClient.base = baseClient
+	transport := &Transport{client: client, headers: make(http.Header), endpoint: "http://example.com/mcp", c: streamClient}
+	baseClient.Transport = transport
+
+	response, err := baseClient.Send(context.Background(), &jsonrpc.Request{Jsonrpc: jsonrpc.Version, Method: "ping"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response == nil || response.Error == nil || response.Error.Code != -32020 {
+		t.Fatalf("expected JSON-RPC -32020 response, got %#v", response)
+	}
+}
+
 func TestTransportSendData_AllowsConcurrentPostsWhileRequestInFlight(t *testing.T) {
 	firstEntered := make(chan struct{})
 	releaseFirst := make(chan struct{})

@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -26,15 +28,19 @@ const (
 	sseMime                 = "text/event-stream"
 )
 
-// Handler implements server-side of Streamable-HTTP transport (Model Context Protocol).
-// Single endpoint (URI) is used for handshake, message exchange and streaming.
-// Operation mode is distinguished by HTTP method and Accept header value.
+// Handler implements stateful and stateless server-side Streamable HTTP.
+// A resolver may select stateless handling per request so protocol generations
+// with different session semantics can share one endpoint.
 type Handler struct {
 	Options
 	base       *base.Handler
 	locator    session.Locator
 	newHandler transport.NewHandler
 	options    []base.Option
+
+	statelessRequestID atomic.Uint64
+	statelessMu        sync.RWMutex
+	statelessTrips     map[string]*base.Session
 }
 
 // ServeHTTP implements http.Handler.
@@ -56,10 +62,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		h.handlePOST(w, r)
 	case http.MethodGet:
+		if h.isStatelessRequest(r) {
+			http.Error(w, "GET stream is unavailable in stateless mode", http.StatusMethodNotAllowed)
+			return
+		}
 		h.handleGET(w, r)
 	case http.MethodOptions:
 		h.handleOPTIONS(w, r)
 	case http.MethodDelete:
+		if h.isStatelessRequest(r) {
+			http.Error(w, "session deletion is unavailable in stateless mode", http.StatusMethodNotAllowed)
+			return
+		}
 		h.handleDELETE(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -67,6 +81,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handlePOST(w http.ResponseWriter, r *http.Request) {
+	if h.isStatelessRequest(r) {
+		h.handleStatelessPOST(w, r)
+		return
+	}
 	// locate session using configured location (default: header)
 	sessionID, _ := h.locator.Locate(h.SessionLocation, r)
 	if sessionID == "" {
@@ -91,6 +109,121 @@ func (h *Handler) handlePOST(w http.ResponseWriter, r *http.Request) {
 	}
 	// message for existing session
 	h.handleMessage(w, r, sessionID)
+}
+
+func (h *Handler) isStatelessRequest(r *http.Request) bool {
+	if h.Options.Stateless {
+		return true
+	}
+	return h.Options.StatelessResolver != nil && h.Options.StatelessResolver(r)
+}
+
+func (h *Handler) handleStatelessPOST(w http.ResponseWriter, r *http.Request) {
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to read request body: %v", err), http.StatusBadRequest)
+		return
+	}
+	_ = r.Body.Close()
+	if responseID, ok := statelessResponseID(data); ok {
+		aSession := h.statelessSession(responseID)
+		if aSession == nil {
+			http.Error(w, "stateless response does not match an active request", http.StatusBadRequest)
+			return
+		}
+		ctx := context.WithValue(r.Context(), jsonrpc.SessionKey, aSession)
+		h.base.HandleMessage(ctx, aSession, data, nil)
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
+	// Notifications have no response and therefore do not need an SSE stream.
+	if !hasID(data) {
+		aSession := base.NewSession(r.Context(), "", io.Discard, h.newHandler, h.statelessSessionOptions()...)
+		ctx := context.WithValue(r.Context(), jsonrpc.SessionKey, aSession)
+		h.base.HandleMessage(ctx, aSession, data, nil)
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
+	if acceptsSSE(r.Header) {
+		w.Header().Set("Content-Type", sseMime)
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		h.setCORSHeaders(w, r)
+		w.WriteHeader(http.StatusOK)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+
+		options := append(h.statelessSessionOptions(), base.WithFramer(frameSSE), base.WithSSE())
+		aSession := base.NewSession(r.Context(), "", common.NewFlushWriter(w), h.newHandler, options...)
+		ctx := context.WithValue(r.Context(), jsonrpc.SessionKey, aSession)
+		h.base.HandleMessage(ctx, aSession, data, nil)
+		return
+	}
+
+	aSession := base.NewSession(r.Context(), "", io.Discard, h.newHandler, h.statelessSessionOptions()...)
+	ctx := context.WithValue(r.Context(), jsonrpc.SessionKey, aSession)
+	buffer := bytes.Buffer{}
+	h.base.HandleMessage(ctx, aSession, data, &buffer)
+	if buffer.Len() == 0 {
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buffer.Bytes())
+}
+
+func (h *Handler) statelessSessionOptions() []base.Option {
+	return []base.Option{
+		base.WithRequestIDGenerator(func() jsonrpc.RequestId {
+			return int(h.statelessRequestID.Add(1))
+		}),
+		base.WithRoundTripLifecycle(h.registerStatelessTrip, h.completeStatelessTrip),
+	}
+}
+
+func (h *Handler) registerStatelessTrip(id jsonrpc.RequestId, session *base.Session) {
+	h.statelessMu.Lock()
+	h.statelessTrips[requestIDKey(id)] = session
+	h.statelessMu.Unlock()
+}
+
+func (h *Handler) completeStatelessTrip(id jsonrpc.RequestId, session *base.Session) {
+	key := requestIDKey(id)
+	h.statelessMu.Lock()
+	if h.statelessTrips[key] == session {
+		delete(h.statelessTrips, key)
+	}
+	h.statelessMu.Unlock()
+}
+
+func (h *Handler) statelessSession(id jsonrpc.RequestId) *base.Session {
+	h.statelessMu.RLock()
+	session := h.statelessTrips[requestIDKey(id)]
+	h.statelessMu.RUnlock()
+	return session
+}
+
+func requestIDKey(id jsonrpc.RequestId) string {
+	if numeric, ok := jsonrpc.AsRequestIntId(id); ok {
+		return "n:" + strconv.Itoa(numeric)
+	}
+	encoded, _ := json.Marshal(id)
+	return "j:" + string(encoded)
+}
+
+func statelessResponseID(data []byte) (jsonrpc.RequestId, bool) {
+	var message struct {
+		ID     jsonrpc.RequestId `json:"id"`
+		Method string            `json:"method"`
+	}
+	if json.Unmarshal(data, &message) != nil || message.Method != "" || message.ID == nil {
+		return nil, false
+	}
+	return message.ID, true
 }
 
 func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
@@ -421,7 +554,8 @@ func New(newHandler transport.NewHandler, opts ...Option) *Handler {
 			KeepAliveInterval:    30 * time.Second,
 			RehydrateOnHandshake: true,
 		},
-		base: base.NewHandler(),
+		base:           base.NewHandler(),
+		statelessTrips: make(map[string]*base.Session),
 		options: []base.Option{
 			base.WithFramer(frameJSON),
 		},

@@ -47,6 +47,13 @@ type Options struct {
 	// KeepAliveInterval controls emission of SSE keepalive frames on the
 	// long-lived GET stream. Zero or negative disables keepalives.
 	KeepAliveInterval time.Duration
+
+	// Stateless handles each POST as an independent request without creating
+	// or looking up a transport session.
+	Stateless bool
+	// StatelessResolver optionally selects stateless handling per request. It
+	// enables legacy stateful and newer stateless protocols on one endpoint.
+	StatelessResolver func(*http.Request) bool
 }
 
 // Option mutates Options.
@@ -150,4 +157,15 @@ func WithLogoutAllPath(path string) Option { return func(o *Options) { o.LogoutA
 // Set to 0 or negative to disable.
 func WithKeepAliveInterval(d time.Duration) Option {
 	return func(o *Options) { o.KeepAliveInterval = d }
+}
+
+// WithStateless enables stateless handling for every Streamable HTTP request.
+func WithStateless() Option {
+	return func(o *Options) { o.Stateless = true }
+}
+
+// WithStatelessResolver selects stateless handling per HTTP request. A true
+// result takes precedence over the default stateful behavior.
+func WithStatelessResolver(resolver func(*http.Request) bool) Option {
+	return func(o *Options) { o.StatelessResolver = resolver }
 }

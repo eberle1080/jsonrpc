@@ -28,10 +28,20 @@ func NewRoundTrip(request *jsonrpc.Request) *RoundTrip {
 
 // Wait waits for the trip to finish
 func (t *RoundTrip) Wait(ctx context.Context, timeout time.Duration) error {
+	if timeout <= 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.done:
+			return t.err
+		}
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(timeout):
+	case <-timer.C:
 		return errors.New("timeout")
 	case <-t.done:
 		if t.err != nil {

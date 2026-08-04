@@ -80,6 +80,20 @@ func TestClientSendAdvancesSequenceForExplicitNumericID(t *testing.T) {
 	assertResponseResult(t, explicitResult, `"tool-result"`)
 }
 
+func TestRoundTripWaitWithoutTransportTimeoutUsesContext(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	trip := transport.NewRoundTrip(&jsonrpc.Request{Id: 1, Jsonrpc: jsonrpc.Version, Method: "subscriptions/listen"})
+	started := time.Now()
+	err := trip.Wait(ctx, 0)
+	if err != context.DeadlineExceeded {
+		t.Fatalf("expected context deadline, got %v", err)
+	}
+	if time.Since(started) < 15*time.Millisecond {
+		t.Fatal("wait returned before context cancellation")
+	}
+}
+
 type sendResult struct {
 	response *jsonrpc.Response
 	err      error

@@ -3,6 +3,7 @@ package streamable
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,10 +21,10 @@ import (
 
 const sseMime = "text/event-stream"
 
-// Client implements streamable-http transport consumer (MCP 2025-03-26 spec).
-// Handshake: POST /mcp -> obtains session id header.
-// Stream    : GET  /mcp with same header and Accept: application/x-ndjson keeps receiving messages.
-// Messages  : subsequent POST /mcp with header carry requests/notifications.
+// Client implements stateful and stateless Streamable HTTP transport.
+// Stateful mode retains the legacy POST handshake and background GET stream.
+// Stateless mode carries requests, notifications, and bidirectional messages
+// on independent POSTs, with optional SSE responses for streaming.
 type Client struct {
 	endpointURL string // /mcp endpoint
 	base        *base.Client
@@ -45,6 +46,9 @@ type Client struct {
 	// protocolVersion, if set, will be sent as MCP-Protocol-Version header
 	// on all HTTP requests (POST/GET) made by this client.
 	protocolVersion string
+	stateless       bool
+
+	requestHeaderProvider RequestHeaderProvider
 
 	// streaming control
 	streamMu     sync.Mutex
@@ -81,7 +85,7 @@ func (c *Client) Close() error {
 // sessionContext returns a context enriched with the current MCP session id. If
 // no session id has been established yet it returns the original context.
 func (c *Client) sessionContext(ctx context.Context) context.Context {
-	if c.sessionID == "" {
+	if c.stateless || c.sessionID == "" {
 		return ctx
 	}
 	return context.WithValue(ctx, jsonrpc.SessionKey, c.sessionID)
@@ -141,12 +145,12 @@ func (c *Client) consumeSSEGet(ctx context.Context, reader *bufio.Reader) {
 	for {
 		evt, err := readSSE(ctx, reader)
 		if err != nil {
-			if err != io.EOF && err != io.ErrUnexpectedEOF {
+			if err != io.EOF && err != io.ErrUnexpectedEOF && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 				c.base.SetError(err)
 			}
 			return
 		}
-		if evt.ID != "" {
+		if evt.ID != "" && !c.stateless {
 			if v, err := strconv.ParseUint(strings.TrimSpace(evt.ID), 10, 64); err == nil {
 				c.lastIDGet = v
 			}
@@ -163,12 +167,12 @@ func (c *Client) consumeSSEPost(ctx context.Context, reader *bufio.Reader) {
 	for {
 		evt, err := readSSE(ctx, reader)
 		if err != nil {
-			if err != io.EOF && err != io.ErrUnexpectedEOF {
+			if err != io.EOF && err != io.ErrUnexpectedEOF && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 				c.base.SetError(err)
 			}
 			return
 		}
-		if evt.ID != "" {
+		if evt.ID != "" && !c.stateless {
 			if v, err := strconv.ParseUint(strings.TrimSpace(evt.ID), 10, 64); err == nil {
 				c.lastIDPost = v
 			}
@@ -224,6 +228,9 @@ func readSSE(ctx context.Context, reader *bufio.Reader) (*sseEvent, error) {
 
 // ensureStream starts a background reconnection loop for the GET SSE stream once a session id exists.
 func (c *Client) ensureStream() {
+	if c.stateless {
+		return
+	}
 	c.streamMu.Lock()
 	if c.streamActive {
 		c.streamMu.Unlock()

@@ -1,5 +1,7 @@
 package base
 
+import "github.com/viant/jsonrpc"
+
 // Option represents option
 type Option func(s *Session)
 
@@ -49,5 +51,23 @@ func WithEventOverflowPolicy(policy OverflowPolicy) Option {
 		s.Mutex.Lock()
 		defer s.Mutex.Unlock()
 		s.overflowPolicy = policy
+	}
+}
+
+// WithRequestIDGenerator overrides all server-initiated request IDs for this
+// session. Stateless transports use it to make response routing globally
+// unambiguous across concurrent requests.
+func WithRequestIDGenerator(generator func() jsonrpc.RequestId) Option {
+	return func(s *Session) {
+		s.requestIDGenerator = generator
+	}
+}
+
+// WithRoundTripLifecycle observes registration and completion of
+// server-initiated requests for transports that route responses externally.
+func WithRoundTripLifecycle(registered, completed func(jsonrpc.RequestId, *Session)) Option {
+	return func(s *Session) {
+		s.roundTripRegistered = registered
+		s.roundTripCompleted = completed
 	}
 }
