@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -23,7 +24,9 @@ type Client struct {
 	Logger       jsonrpc.Logger        // Logger for error messages
 	Interceptor  transport.Interceptor // Interceptor for request/response
 	RequestIdSeq uint64
-	err          error
+
+	errMu sync.RWMutex
+	err   error
 }
 
 // LastRequestID returns the most recently generated request id without mutating the underlying sequence.
@@ -40,8 +43,17 @@ func (c *Client) Notify(ctx context.Context, request *jsonrpc.Notification) erro
 	})
 }
 
+// SetError records a transport failure; later sends fail fast with it. Safe for concurrent use.
 func (c *Client) SetError(err error) {
+	c.errMu.Lock()
 	c.err = err
+	c.errMu.Unlock()
+}
+
+func (c *Client) getError() error {
+	c.errMu.RLock()
+	defer c.errMu.RUnlock()
+	return c.err
 }
 
 func (c *Client) NextRequestID() jsonrpc.RequestId {
@@ -51,6 +63,10 @@ func (c *Client) NextRequestID() jsonrpc.RequestId {
 func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
 	if request.Id == nil {
 		request.Id = c.NextRequestID()
+	} else if intID, ok := jsonrpc.AsRequestIntId(request.Id); ok && intID > 0 {
+		// Treat an explicit numeric ID as a high-water mark. Otherwise the next
+		// transport-generated ID could collide with an in-flight explicit request.
+		c.advanceRequestIDSeq(uint64(intID))
 	}
 	trip, err := c.send(ctx, request)
 	if err != nil {
@@ -61,6 +77,20 @@ func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.R
 		return nil, err
 	}
 	return trip.Response, err
+}
+
+// advanceRequestIDSeq raises the sequence without moving it backwards when
+// explicit and transport-generated requests are sent concurrently.
+func (c *Client) advanceRequestIDSeq(id uint64) {
+	for {
+		current := atomic.LoadUint64(&c.RequestIdSeq)
+		if current >= id {
+			return
+		}
+		if atomic.CompareAndSwapUint64(&c.RequestIdSeq, current, id) {
+			return
+		}
+	}
 }
 
 func (c *Client) HandleMessage(ctx context.Context, data []byte) {
@@ -157,8 +187,8 @@ func (c *Client) handleOnNotification(ctx context.Context, data []byte, message 
 }
 
 func (c *Client) send(ctx context.Context, request *jsonrpc.Request) (*transport.RoundTrip, error) {
-	if c.err != nil {
-		return nil, c.err
+	if err := c.getError(); err != nil {
+		return nil, err
 	}
 	trip, err := c.RoundTrips.Add(request)
 	if err != nil {

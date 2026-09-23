@@ -36,18 +36,26 @@ func (s *Transport) LastRequestID() jsonrpc.RequestId {
 }
 
 func (s *Transport) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	if request.Id == nil {
+	if s.session.requestIDGenerator != nil {
+		request.Id = s.NextRequestID()
+	} else if request.Id == nil {
 		request.Id = s.NextRequestID()
 	}
 	data, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
 	}
-	s.sendData(ctx, data)
 	roundTrip, err := s.tripper.Add(request)
 	if err != nil {
 		return nil, err
 	}
+	if s.session.roundTripRegistered != nil {
+		s.session.roundTripRegistered(request.Id, s.session)
+	}
+	if s.session.roundTripCompleted != nil {
+		defer s.session.roundTripCompleted(request.Id, s.session)
+	}
+	s.sendData(ctx, data)
 	err = roundTrip.Wait(ctx, s.TripTimeout)
 	if err != nil {
 		return nil, err

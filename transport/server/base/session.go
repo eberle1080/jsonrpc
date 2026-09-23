@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/eberle1080/jsonrpc"
+	"github.com/eberle1080/jsonrpc/transport"
+	"github.com/google/uuid"
 	"io"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/eberle1080/jsonrpc"
-	"github.com/eberle1080/jsonrpc/transport"
-	"github.com/google/uuid"
 )
 
 type Session struct {
@@ -42,6 +41,10 @@ type Session struct {
 
 	// writerGen increments on each writer (re)attachment to guard concurrent writers.
 	writerGen uint64
+
+	requestIDGenerator  func() jsonrpc.RequestId
+	roundTripRegistered func(jsonrpc.RequestId, *Session)
+	roundTripCompleted  func(jsonrpc.RequestId, *Session)
 }
 
 // LastRequestID returns the most recently generated request id without mutating the underlying sequence.
@@ -51,6 +54,9 @@ func (s *Session) LastRequestID() jsonrpc.RequestId {
 }
 
 func (s *Session) NextRequestID() jsonrpc.RequestId {
+	if s.requestIDGenerator != nil {
+		return s.requestIDGenerator()
+	}
 	return int(atomic.AddUint64(&s.RequestIdSeq, 1))
 }
 
@@ -106,6 +112,7 @@ func (s *Session) SendRequest(ctx context.Context, request *jsonrpc.Request) {
 		return
 	}
 	s.SendData(ctx, data)
+
 }
 
 func (s *Session) sendNotification(ctx context.Context, notification *jsonrpc.Notification) error {
@@ -174,24 +181,28 @@ func (s *Session) storeEvent(id uint64, data []byte) {
 
 // EventsAfter returns buffered framed messages with id greater than lastID.
 func (s *Session) EventsAfter(lastID uint64) [][]byte {
-	if lastID == 0 || len(s.events) == 0 {
-		res := make([][]byte, len(s.events))
-		for i, ev := range s.events {
+	s.Mutex.Lock()
+	events := make([]event, len(s.events))
+	copy(events, s.events)
+	s.Mutex.Unlock()
+	if lastID == 0 || len(events) == 0 {
+		res := make([][]byte, len(events))
+		for i, ev := range events {
 			res[i] = ev.data
 		}
 		return res
 	}
 	var idx int
 	// simple linear search as buffer small
-	for idx < len(s.events) && s.events[idx].id <= lastID {
+	for idx < len(events) && events[idx].id <= lastID {
 		idx++
 	}
-	if idx >= len(s.events) {
+	if idx >= len(events) {
 		return nil
 	}
-	res := make([][]byte, len(s.events)-idx)
-	for i := idx; i < len(s.events); i++ {
-		res[i-idx] = s.events[i].data
+	res := make([][]byte, len(events)-idx)
+	for i := idx; i < len(events); i++ {
+		res[i-idx] = events[i].data
 	}
 	return res
 }
@@ -209,6 +220,9 @@ func NewSession(ctx context.Context, id string, writer io.Writer, newHandler tra
 		State:         SessionStateActive,
 		WriterPresent: writer != nil,
 	}
+	for _, option := range options {
+		option(ret)
+	}
 	if newHandler == nil {
 		fmt.Printf("WARNING: NewSession called with nil newHandler for session %s\n", id)
 		ret.Handler = nil
@@ -217,9 +231,6 @@ func NewSession(ctx context.Context, id string, writer io.Writer, newHandler tra
 		if ret.Handler == nil {
 			fmt.Printf("WARNING: newHandler returned nil handler for session %s\n", id)
 		}
-	}
-	for _, option := range options {
-		option(ret)
 	}
 	return ret
 }
@@ -247,6 +258,7 @@ func (s *Session) MarkDetached() {
 	s.DetachedAt = &now
 	s.State = SessionStateDetached
 	s.WriterPresent = false
+	s.Writer = nil
 	s.Mutex.Unlock()
 }
 
@@ -265,4 +277,28 @@ func (s *Session) MarkActiveWithWriter(w io.Writer) {
 // WriterGeneration returns the current writer attachment generation.
 func (s *Session) WriterGeneration() uint64 {
 	return atomic.LoadUint64(&s.writerGen)
+}
+
+// WriteKeepAlive writes a keepalive comment to the session writer under mutex.
+// Returns false if the writer is nil (session detached).
+func (s *Session) WriteKeepAlive(data []byte) bool {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	if s.Writer == nil {
+		return false
+	}
+	_, _ = s.Writer.Write(data)
+	return true
+}
+
+// WriteBuffered writes framed or replay data to the current session writer.
+// Returns false when the session has no attached writer.
+func (s *Session) WriteBuffered(data []byte) bool {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	if s.Writer == nil {
+		return false
+	}
+	_, _ = s.Writer.Write(data)
+	return true
 }

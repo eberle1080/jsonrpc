@@ -3,6 +3,7 @@ package streamable
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,10 +21,10 @@ import (
 
 const sseMime = "text/event-stream"
 
-// Client implements streamable-http transport consumer (MCP 2025-03-26 spec).
-// Handshake: POST /mcp -> obtains session id header.
-// Stream    : GET  /mcp with same header and Accept: application/x-ndjson keeps receiving messages.
-// Messages  : subsequent POST /mcp with header carry requests/notifications.
+// Client implements stateful and stateless Streamable HTTP transport.
+// Stateful mode retains the legacy POST handshake and background GET stream.
+// Stateless mode carries requests, notifications, and bidirectional messages
+// on independent POSTs, with optional SSE responses for streaming.
 type Client struct {
 	endpointURL string // /mcp endpoint
 	base        *base.Client
@@ -32,6 +33,7 @@ type Client struct {
 	handshakeTimeout time.Duration
 
 	sessionID string
+	sessionMu sync.RWMutex
 
 	lastIDGet  uint64
 	lastIDPost uint64
@@ -45,19 +47,50 @@ type Client struct {
 	// protocolVersion, if set, will be sent as MCP-Protocol-Version header
 	// on all HTTP requests (POST/GET) made by this client.
 	protocolVersion string
+	stateless       bool
+
+	requestHeaderProvider RequestHeaderProvider
 
 	// streaming control
 	streamMu     sync.Mutex
 	streamActive bool
+
+	// lifecycle: Close terminates the background runStream goroutine and
+	// cancels any in-flight SSE read on the GET stream. Without these the
+	// runStream loop never exits — see Close.
+	closeOnce    sync.Once
+	done         chan struct{}
+	streamCtx    context.Context
+	streamCancel context.CancelFunc
+}
+
+// Close terminates the background SSE stream goroutine started by
+// ensureStream and cancels any in-flight stream read. Safe to call multiple
+// times. Returns nil; the signature exists so callers (e.g. pool managers)
+// can treat the client as a regular io.Closer-like resource.
+func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
+	c.closeOnce.Do(func() {
+		if c.streamCancel != nil {
+			c.streamCancel()
+		}
+		if c.done != nil {
+			close(c.done)
+		}
+	})
+	return nil
 }
 
 // sessionContext returns a context enriched with the current MCP session id. If
 // no session id has been established yet it returns the original context.
 func (c *Client) sessionContext(ctx context.Context) context.Context {
-	if c.sessionID == "" {
+	id := c.SessionID()
+	if c.stateless || id == "" {
 		return ctx
 	}
-	return context.WithValue(ctx, jsonrpc.SessionKey, c.sessionID)
+	return context.WithValue(ctx, jsonrpc.SessionKey, id)
 }
 
 // Notify sends JSON-RPC notification.
@@ -71,7 +104,17 @@ func (c *Client) Send(ctx context.Context, r *jsonrpc.Request) (*jsonrpc.Respons
 }
 
 // SessionID returns the currently configured or negotiated session id.
-func (c *Client) SessionID() string { return c.sessionID }
+func (c *Client) SessionID() string {
+	c.sessionMu.RLock()
+	defer c.sessionMu.RUnlock()
+	return c.sessionID
+}
+
+func (c *Client) setSessionID(id string) {
+	c.sessionMu.Lock()
+	c.sessionID = id
+	c.sessionMu.Unlock()
+}
 
 func (c *Client) openStream(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpointURL, nil)
@@ -79,7 +122,7 @@ func (c *Client) openStream(ctx context.Context) error {
 		return err
 	}
 	req.Header.Set("Accept", sseMime)
-	req.Header.Set(c.sessionHeaderName, c.sessionID)
+	req.Header.Set(c.sessionHeaderName, c.SessionID())
 	if c.protocolVersion != "" {
 		req.Header.Set("MCP-Protocol-Version", c.protocolVersion)
 	}
@@ -114,12 +157,12 @@ func (c *Client) consumeSSEGet(ctx context.Context, reader *bufio.Reader) {
 	for {
 		evt, err := readSSE(ctx, reader)
 		if err != nil {
-			if err != io.EOF && err != io.ErrUnexpectedEOF {
+			if err != io.EOF && err != io.ErrUnexpectedEOF && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 				c.base.SetError(err)
 			}
 			return
 		}
-		if evt.ID != "" {
+		if evt.ID != "" && !c.stateless {
 			if v, err := strconv.ParseUint(strings.TrimSpace(evt.ID), 10, 64); err == nil {
 				c.lastIDGet = v
 			}
@@ -136,12 +179,12 @@ func (c *Client) consumeSSEPost(ctx context.Context, reader *bufio.Reader) {
 	for {
 		evt, err := readSSE(ctx, reader)
 		if err != nil {
-			if err != io.EOF && err != io.ErrUnexpectedEOF {
+			if err != io.EOF && err != io.ErrUnexpectedEOF && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 				c.base.SetError(err)
 			}
 			return
 		}
-		if evt.ID != "" {
+		if evt.ID != "" && !c.stateless {
 			if v, err := strconv.ParseUint(strings.TrimSpace(evt.ID), 10, 64); err == nil {
 				c.lastIDPost = v
 			}
@@ -197,6 +240,9 @@ func readSSE(ctx context.Context, reader *bufio.Reader) (*sseEvent, error) {
 
 // ensureStream starts a background reconnection loop for the GET SSE stream once a session id exists.
 func (c *Client) ensureStream() {
+	if c.stateless {
+		return
+	}
 	c.streamMu.Lock()
 	if c.streamActive {
 		c.streamMu.Unlock()
@@ -209,20 +255,38 @@ func (c *Client) ensureStream() {
 }
 
 func (c *Client) runStream() {
+	defer func() {
+		c.streamMu.Lock()
+		c.streamActive = false
+		c.streamMu.Unlock()
+	}()
 	// simple exponential backoff with cap
 	backoff := 500 * time.Millisecond
 	maxBackoff := 10 * time.Second
 	for {
+		select {
+		case <-c.done:
+			return
+		default:
+		}
 		// wait until session id is available
-		if c.sessionID == "" {
-			time.Sleep(100 * time.Millisecond)
+		if c.SessionID() == "" {
+			select {
+			case <-c.done:
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
 			continue
 		}
-		// Use a background context for long-lived stream
-		ctx := context.Background()
-		if err := c.openStream(ctx); err != nil {
-			// stream couldn't be opened; back off and retry
-			time.Sleep(backoff)
+		// Use the long-lived stream context so Close cancels any blocking
+		// SSE read in openStream.
+		if err := c.openStream(c.streamCtx); err != nil {
+			// stream couldn't be opened; back off and retry, unless closing
+			select {
+			case <-c.done:
+				return
+			case <-time.After(backoff):
+			}
 			if backoff < maxBackoff {
 				backoff *= 2
 				if backoff > maxBackoff {
@@ -250,7 +314,9 @@ func New(ctx context.Context, endpointURL string, opts ...Option) (*Client, erro
 		endpointURL:      endpointURL,
 		httpClient:       httpClient,
 		handshakeTimeout: 30 * time.Second,
+		done:             make(chan struct{}),
 	}
+	c.streamCtx, c.streamCancel = context.WithCancel(context.Background())
 	c.sessionHeaderName = "Mcp-Session-Id"
 	// Default protocol version (can be overridden via option)
 	if c.protocolVersion == "" {

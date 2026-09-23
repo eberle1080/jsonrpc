@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,11 +20,20 @@ type serverHandler struct{}
 func (h *serverHandler) Serve(_ context.Context, _ *jsonrpc.Request, _ *jsonrpc.Response) {}
 func (h *serverHandler) OnNotification(_ context.Context, _ *jsonrpc.Notification)        {}
 
+type echoHandler struct{}
+
+func (h *echoHandler) Serve(_ context.Context, _ *jsonrpc.Request, resp *jsonrpc.Response) {
+	resp.Result = []byte(`{"ok":true}`)
+}
+
+func (h *echoHandler) OnNotification(_ context.Context, _ *jsonrpc.Notification) {}
+
 func TestStreamable_DetachReconnectAndCleanup(t *testing.T) {
 	// Fast sweeper and grace for test
 	opts := []Option{
 		WithURI("/mcp-test"),
 		WithCleanupInterval(50 * time.Millisecond),
+		WithKeepAliveInterval(time.Millisecond),
 		WithReconnectGrace(300 * time.Millisecond),
 		WithIdleTTL(0),
 		WithMaxLifetime(0),
@@ -71,8 +81,11 @@ func TestStreamable_DetachReconnectAndCleanup(t *testing.T) {
 	if !ok {
 		t.Fatalf("session not found after detach")
 	}
-	if sess.State != base.SessionStateDetached {
-		t.Fatalf("expected detached state, got %v", sess.State)
+	sess.Lock()
+	state := sess.State
+	sess.Unlock()
+	if state != base.SessionStateDetached {
+		t.Fatalf("expected detached state, got %v", state)
 	}
 
 	// Reconnect within grace
@@ -85,8 +98,11 @@ func TestStreamable_DetachReconnectAndCleanup(t *testing.T) {
 	}
 	// Allow reattach
 	time.Sleep(50 * time.Millisecond)
-	if sess.State != base.SessionStateActive {
-		t.Fatalf("expected active state after reconnect, got %v", sess.State)
+	sess.Lock()
+	state = sess.State
+	sess.Unlock()
+	if state != base.SessionStateActive {
+		t.Fatalf("expected active state after reconnect, got %v", state)
 	}
 	_ = getResp2.Body.Close()
 
@@ -130,7 +146,9 @@ func TestStreamable_IdleTTLAndMaxLifetime(t *testing.T) {
 	}
 
 	// Force idle by backdating LastSeen
+	sess.Lock()
 	sess.LastSeen = time.Now().Add(-2 * time.Second)
+	sess.Unlock()
 	time.Sleep(120 * time.Millisecond) // > IdleTTL and > CleanupInterval
 	if _, ok := h.base.Sessions.Get(context.TODO(), sid); ok {
 		t.Fatalf("expected session removed due to IdleTTL")
@@ -150,10 +168,57 @@ func TestStreamable_IdleTTLAndMaxLifetime(t *testing.T) {
 	if !ok {
 		t.Fatalf("session2 not found after handshake")
 	}
+	sess2.Lock()
 	sess2.CreatedAt = time.Now().Add(-1 * time.Hour)
+	sess2.Unlock()
 
 	time.Sleep(80 * time.Millisecond) // allow sweeper
 	if _, ok := h.base.Sessions.Get(context.TODO(), sid2); ok {
 		t.Fatalf("expected session removed due to MaxLifetime")
+	}
+}
+
+func TestStreamable_PostMessage_RemainsSynchronousJSONEvenWhenEventStreamAccepted(t *testing.T) {
+	var _ transport.Handler = (*echoHandler)(nil)
+
+	h := New(func(ctx context.Context, tr transport.Transport) transport.Handler {
+		return &echoHandler{}
+	}, []Option{WithURI("/mcp-test-sync")}...)
+
+	mux := http.NewServeMux()
+	mux.Handle("/mcp-test-sync", h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	handshakeResp, err := http.Post(srv.URL+"/mcp-test-sync", "application/json", strings.NewReader(`{"jsonrpc":"2.0","id":0,"method":"initialize","params":{}}`))
+	if err != nil {
+		t.Fatalf("handshake POST failed: %v", err)
+	}
+	_ = handshakeResp.Body.Close()
+	sid := handshakeResp.Header.Get(defaultSessionHeaderKey)
+	if sid == "" {
+		t.Fatalf("missing session id header %s", defaultSessionHeaderKey)
+	}
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/mcp-test-sync", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}`))
+	req.Header.Set("Accept", "text/event-stream, application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(defaultSessionHeaderKey, sid)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("message POST failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("expected synchronous application/json response, got %q", got)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+	if !strings.Contains(string(body), `"ok":true`) {
+		t.Fatalf("expected JSON body, got %s", string(body))
 	}
 }

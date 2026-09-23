@@ -1,20 +1,31 @@
 package streamable
 
 import (
-	"net/http"
-	"time"
-
+	"context"
 	"github.com/eberle1080/jsonrpc"
 	"github.com/eberle1080/jsonrpc/transport"
+	"net/http"
+	"time"
 )
+
+// RequestHeaderProvider derives per-message HTTP headers from the encoded
+// JSON-RPC payload. Protocol layers can use this without coupling jsonrpc to
+// protocol-specific routing headers.
+type RequestHeaderProvider func(context.Context, []byte, http.Header) error
 
 // Option mutates Client.
 type Option func(*Client)
 
-// WithHTTPClient allows custom http.Client.
+// WithHTTPClient allows custom http.Client for both SSE stream (GET) and
+// JSON-RPC message (POST) requests.
 func WithHTTPClient(client *http.Client) Option {
 	return func(c *Client) {
 		c.httpClient = client
+		// Also update the Transport's client so POST requests use the same
+		// http.Client (e.g., with auth RoundTripper).
+		if c.transport != nil {
+			c.transport.client = client
+		}
 	}
 }
 
@@ -68,6 +79,31 @@ func WithProtocolVersion(version string) Option {
 	}
 }
 
+// WithStateless enables independent POST-based Streamable HTTP requests. In
+// this mode no session id or background GET stream is required.
+func WithStateless() Option {
+	return func(c *Client) {
+		c.stateless = true
+	}
+}
+
+// WithRequestHeaderProvider installs a hook invoked for each outgoing POST
+// after static transport headers have been copied.
+func WithRequestHeaderProvider(provider RequestHeaderProvider) Option {
+	return func(c *Client) {
+		c.requestHeaderProvider = provider
+	}
+}
+
+// WithRunTimeout controls how long Send waits for a JSON-RPC response. A
+// non-positive duration disables the transport timer and relies on context
+// cancellation, which is useful for long-lived requests.
+func WithRunTimeout(timeout time.Duration) Option {
+	return func(c *Client) {
+		c.base.RunTimeout = timeout
+	}
+}
+
 // WithSessionID sets an explicit session id for the client. When set, the
 // client immediately applies the session header to POST requests and uses the
 // same header on GET stream requests, allowing reconnects without a handshake.
@@ -77,7 +113,7 @@ func WithSessionID(id string) Option {
 		if id == "" {
 			return
 		}
-		c.sessionID = id
+		c.setSessionID(id)
 		if c.transport != nil && c.transport.headers != nil {
 			// Ensure POSTs include the session header immediately
 			if c.sessionHeaderName == "" {
