@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -23,7 +24,9 @@ type Client struct {
 	Logger       jsonrpc.Logger        // Logger for error messages
 	Interceptor  transport.Interceptor // Interceptor for request/response
 	RequestIdSeq uint64
-	err          error
+
+	errMu sync.RWMutex
+	err   error
 }
 
 // LastRequestID returns the most recently generated request id without mutating the underlying sequence.
@@ -40,8 +43,17 @@ func (c *Client) Notify(ctx context.Context, request *jsonrpc.Notification) erro
 	})
 }
 
+// SetError records a transport failure; later sends fail fast with it. Safe for concurrent use.
 func (c *Client) SetError(err error) {
+	c.errMu.Lock()
 	c.err = err
+	c.errMu.Unlock()
+}
+
+func (c *Client) getError() error {
+	c.errMu.RLock()
+	defer c.errMu.RUnlock()
+	return c.err
 }
 
 func (c *Client) NextRequestID() jsonrpc.RequestId {
@@ -175,8 +187,8 @@ func (c *Client) handleOnNotification(ctx context.Context, data []byte, message 
 }
 
 func (c *Client) send(ctx context.Context, request *jsonrpc.Request) (*transport.RoundTrip, error) {
-	if c.err != nil {
-		return nil, c.err
+	if err := c.getError(); err != nil {
+		return nil, err
 	}
 	trip, err := c.RoundTrips.Add(request)
 	if err != nil {
