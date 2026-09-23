@@ -51,6 +51,10 @@ func (c *Client) NextRequestID() jsonrpc.RequestId {
 func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
 	if request.Id == nil {
 		request.Id = c.NextRequestID()
+	} else if intID, ok := jsonrpc.AsRequestIntId(request.Id); ok && intID > 0 {
+		// Treat an explicit numeric ID as a high-water mark. Otherwise the next
+		// transport-generated ID could collide with an in-flight explicit request.
+		c.advanceRequestIDSeq(uint64(intID))
 	}
 	trip, err := c.send(ctx, request)
 	if err != nil {
@@ -61,6 +65,20 @@ func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.R
 		return nil, err
 	}
 	return trip.Response, err
+}
+
+// advanceRequestIDSeq raises the sequence without moving it backwards when
+// explicit and transport-generated requests are sent concurrently.
+func (c *Client) advanceRequestIDSeq(id uint64) {
+	for {
+		current := atomic.LoadUint64(&c.RequestIdSeq)
+		if current >= id {
+			return
+		}
+		if atomic.CompareAndSwapUint64(&c.RequestIdSeq, current, id) {
+			return
+		}
+	}
 }
 
 func (c *Client) HandleMessage(ctx context.Context, data []byte) {

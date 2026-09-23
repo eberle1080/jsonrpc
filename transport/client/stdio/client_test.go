@@ -198,28 +198,27 @@ func TestClient_Send(t *testing.T) {
 
 					return result, code, err
 				}
-
+				go func() {
+					deadline := time.Now().Add(time.Second)
+					for time.Now().Before(deadline) {
+						for i := 0; i < client.base.RoundTrips.Size(); i++ {
+							trip := client.base.RoundTrips.Get(i)
+							if trip != nil && trip.Request != nil && trip.Request.Id == 1 {
+								trip.SetResponse(&jsonrpc.Response{
+									Jsonrpc: "2.0",
+									Id:      trip.Request.Id,
+									Result:  []byte(`"success"`),
+								})
+								return
+							}
+						}
+						time.Sleep(time.Millisecond)
+					}
+				}()
 			}
 
 			// Send the request
 			response, err := client.Send(ctx, tt.request)
-
-			// For the "Successful request" test case, set the response on the trip after sending the request
-			if tt.name == "Successful request" {
-				// Find the trip in the ring buffer by iterating through all trips
-				for i := 0; i < client.base.RoundTrips.Size(); i++ {
-					trip := client.base.RoundTrips.Get(i)
-					if trip != nil && trip.Request != nil && trip.Request.Id == 1 {
-						// Set the response on the trip to avoid timeout
-						trip.SetResponse(&jsonrpc.Response{
-							Jsonrpc: "2.0",
-							Id:      trip.Request.Id,
-							Result:  []byte(`"success"`),
-						})
-						break
-					}
-				}
-			}
 
 			// Check for errors
 			if (err != nil) != tt.wantErr {
