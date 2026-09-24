@@ -9,7 +9,7 @@ require (
 	github.com/viant/afs v1.30.0
 	github.com/viant/scy v0.27.0
 	golang.org/x/crypto v0.52.0
-	golang.org/x/net v0.54.0
+	golang.org/x/net v0.55.0
 )
 
 require (
