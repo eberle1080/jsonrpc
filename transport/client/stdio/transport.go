@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/viant/gosh/runner"
+	"github.com/eberle1080/gosh/runner"
 )
 
 type Transport struct {

@@ -3,10 +3,10 @@ module github.com/eberle1080/jsonrpc
 go 1.25.1
 
 require (
+	github.com/eberle1080/gosh v0.0.0-20260924024703-d461f5d2defc
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.11.1
 	github.com/viant/afs v1.30.0
-	github.com/viant/gosh v0.2.4
 	github.com/viant/scy v0.27.0
 	golang.org/x/crypto v0.47.0
 	golang.org/x/net v0.49.0

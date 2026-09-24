@@ -9,9 +9,9 @@ import (
 	"github.com/eberle1080/jsonrpc"
 	transport2 "github.com/eberle1080/jsonrpc/transport"
 	"github.com/eberle1080/jsonrpc/transport/client/base"
-	"github.com/viant/gosh/runner"
-	"github.com/viant/gosh/runner/local"
-	"github.com/viant/gosh/runner/ssh"
+	"github.com/eberle1080/gosh/runner"
+	"github.com/eberle1080/gosh/runner/local"
+	"github.com/eberle1080/gosh/runner/ssh"
 	"github.com/viant/scy/cred/secret"
 	cssh "golang.org/x/crypto/ssh"
 )
