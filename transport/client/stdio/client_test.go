@@ -11,7 +11,7 @@ import (
 	"github.com/eberle1080/jsonrpc"
 	"github.com/eberle1080/jsonrpc/transport"
 	"github.com/eberle1080/jsonrpc/transport/client/base"
-	"github.com/viant/gosh/runner"
+	"github.com/eberle1080/gosh/runner"
 )
 
 // mockRunner is a mock implementation of runner.Runner for testing
