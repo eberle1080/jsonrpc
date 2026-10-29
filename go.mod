@@ -6,7 +6,7 @@ require (
 	github.com/eberle1080/gosh v0.0.0-20260924024703-d461f5d2defc
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.12.1
-	github.com/viant/afs v1.30.0
+	github.com/viant/afs v1.30.1
 	github.com/viant/scy v0.35.1
 	golang.org/x/crypto v0.52.0
 	golang.org/x/net v0.55.0
