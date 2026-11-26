@@ -45,6 +45,8 @@ func asInt(v interface{}) int {
 
 // Error is used to provide additional information about the error that occurred.
 type Error struct {
+	// cause is local diagnostic provenance and never part of the wire error.
+	cause error
 	// The error type that occurred.
 	Code int `json:"code" yaml:"code" mapstructure:"code"`
 
@@ -121,9 +123,10 @@ type Notification struct {
 // UnmarshalJSON is a custom JSON unmarshaler for the Notification type.
 func (m *Notification) UnmarshalJSON(data []byte) error {
 	required := struct {
-		Jsonrpc *string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
-		Method  *string `json:"method" yaml:"method" mapstructure:"method"`
-		Id      *int64  `json:"id" yaml:"id" mapstructure:"id"`
+		Jsonrpc *string         `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
+		Method  *string         `json:"method" yaml:"method" mapstructure:"method"`
+		Id      *int64          `json:"id" yaml:"id" mapstructure:"id"`
+		Params  json.RawMessage `json:"params"`
 	}{}
 	err := json.Unmarshal(data, &required)
 	if err != nil {
@@ -140,6 +143,7 @@ func (m *Notification) UnmarshalJSON(data []byte) error {
 	}
 	m.Jsonrpc = *required.Jsonrpc
 	m.Method = *required.Method
+	m.Params = required.Params
 	return nil
 }
 

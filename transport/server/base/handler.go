@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync/atomic"
 
 	"github.com/eberle1080/jsonrpc"
 	"github.com/eberle1080/jsonrpc/transport/base"
@@ -31,15 +30,8 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 			return
 		}
 		if request.Id != nil {
-			if intId, ok := jsonrpc.AsRequestIntId(request.Id); ok && intId > 0 {
-				// Raise the sequence to at least the client's id without ever lowering it; concurrent
-				// requests would otherwise race a load/store pair and could move it backwards.
-				for {
-					current := atomic.LoadUint64(&session.RequestIdSeq)
-					if uint64(intId) <= current || atomic.CompareAndSwapUint64(&session.RequestIdSeq, current, uint64(intId)) {
-						break
-					}
-				}
+			if intId, ok := jsonrpc.AsRequestIntId(request.Id); ok {
+				session.observeRequestID(intId)
 			}
 		}
 
@@ -84,7 +76,7 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 		response := &jsonrpc.Response{}
 		if err := json.Unmarshal(data, response); err != nil {
 			if e.Logger != nil {
-				e.Logger.Errorf("failed to parse response: %v", err)
+				base.LogParseError(e.Logger, jsonrpc.MessageTypeResponse, err, len(data))
 			}
 			return
 		}
@@ -99,7 +91,7 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 		notification := &jsonrpc.Notification{}
 		if err := json.Unmarshal(data, notification); err != nil {
 			if e.Logger != nil {
-				e.Logger.Errorf("failed to parse notification: %v", err)
+				base.LogParseError(e.Logger, jsonrpc.MessageTypeNotification, err, len(data))
 			}
 			return
 		}

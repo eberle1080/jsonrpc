@@ -3,6 +3,7 @@ package base
 import (
 	"context"
 	"io"
+	"sync/atomic"
 
 	"github.com/eberle1080/jsonrpc/internal/collection"
 	"github.com/eberle1080/jsonrpc/transport"
@@ -47,4 +48,27 @@ func (s *memorySessionStore) GetOrCreate(ctx context.Context, id string, writer 
 // NewMemorySessionStore creates an in-memory SessionStore.
 func NewMemorySessionStore() SessionStore {
 	return &memorySessionStore{m: collection.NewSyncMap[string, *Session]()}
+}
+
+// CloseSession removes a session and invokes its final-close hook at most once.
+// The hook runs after removal and outside session/store locks.
+func CloseSession(ctx context.Context, store SessionStore, id string, closed func(*Session)) {
+	session, ok := store.Get(ctx, id)
+	if !ok {
+		return
+	}
+	store.Delete(ctx, id)
+	session.Close(closed)
+}
+
+// Close invokes the final session-close hook once, including request-scoped
+// stateless sessions which are never inserted into a session store.
+func (session *Session) Close(closed func(*Session)) {
+	if !atomic.CompareAndSwapInt32(&session.closed, 0, 1) {
+		return
+	}
+	if closed != nil {
+		defer func() { _ = recover() }()
+		closed(session)
+	}
 }
