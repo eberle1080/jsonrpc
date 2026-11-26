@@ -72,6 +72,7 @@ func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.R
 	if err != nil {
 		return nil, err // send error
 	}
+	defer c.RoundTrips.Remove(trip)
 	err = trip.Wait(ctx, c.RunTimeout)
 	if err != nil {
 		return nil, err
@@ -115,7 +116,7 @@ func (c *Client) handleResponse(ctx context.Context, data []byte, message *jsonr
 	err := json.Unmarshal(data, response)
 	if err != nil {
 		if c.Logger != nil {
-			c.Logger.Errorf("failed to parse response: %v", err)
+			base.LogParseError(c.Logger, jsonrpc.MessageTypeResponse, err, len(data))
 		}
 		return
 	}
@@ -161,7 +162,7 @@ func (c *Client) handleRequest(ctx context.Context, data []byte, message *jsonrp
 	request := &jsonrpc.Request{}
 	if err := json.Unmarshal(data, request); err != nil {
 		if c.Logger != nil {
-			c.Logger.Errorf("failed to parse request: %v", err)
+			base.LogParseError(c.Logger, jsonrpc.MessageTypeRequest, err, len(data))
 		}
 		return
 	}
@@ -180,7 +181,7 @@ func (c *Client) handleOnNotification(ctx context.Context, data []byte, message 
 	err := json.Unmarshal(bytes.TrimSpace(data), notification)
 	if err != nil {
 		if c.Logger != nil {
-			c.Logger.Errorf("failed to parse notification: %v, %s", err, data)
+			base.LogParseError(c.Logger, jsonrpc.MessageTypeNotification, err, len(data))
 		}
 	}
 	c.Handler.OnNotification(ctx, notification)
@@ -196,6 +197,7 @@ func (c *Client) send(ctx context.Context, request *jsonrpc.Request) (*transport
 	}
 	err = c.sendRequest(ctx, request)
 	if err != nil {
+		c.RoundTrips.Remove(trip)
 		return nil, err
 	}
 	return trip, nil

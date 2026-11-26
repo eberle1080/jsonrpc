@@ -3,7 +3,7 @@ module github.com/eberle1080/jsonrpc
 go 1.25.8
 
 require (
-	github.com/eberle1080/gosh v0.0.0-20260924024703-d461f5d2defc
+	github.com/eberle1080/gosh v0.0.0-20261126040201-a5d2a6cfd919
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.12.1
 	github.com/viant/afs v1.30.0

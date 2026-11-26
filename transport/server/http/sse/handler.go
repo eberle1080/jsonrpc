@@ -43,7 +43,7 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodDelete:
 		if sessionId, _ := s.locator.Locate(s.StreamingSessionLocation, r); sessionId != "" {
-			s.base.Sessions.Delete(r.Context(), sessionId)
+			base.CloseSession(r.Context(), s.base.Sessions, sessionId, s.Options.OnSessionClose)
 			w.WriteHeader(http.StatusOK)
 		}
 
@@ -481,15 +481,7 @@ func (s *Handler) runSweeper() {
 			return true
 		})
 		for _, id := range toDelete {
-			if s.Options.OnSessionClose != nil {
-				if sess, ok := s.base.Sessions.Get(context.TODO(), id); ok {
-					func() {
-						defer func() { _ = recover() }()
-						s.Options.OnSessionClose(sess)
-					}()
-				}
-			}
-			s.base.Sessions.Delete(context.TODO(), id)
+			base.CloseSession(context.TODO(), s.base.Sessions, id, s.Options.OnSessionClose)
 		}
 	}
 }

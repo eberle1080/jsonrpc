@@ -3,6 +3,7 @@ package streamable
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -48,6 +49,7 @@ type Client struct {
 	// on all HTTP requests (POST/GET) made by this client.
 	protocolVersion string
 	stateless       bool
+	optionalSession bool
 
 	requestHeaderProvider RequestHeaderProvider
 
@@ -141,7 +143,7 @@ func (c *Client) openStream(ctx context.Context) error {
 			return jsonrpc.NewUnauthorizedError(resp.StatusCode, body)
 		}
 		_ = resp.Body.Close()
-		return fmt.Errorf("stream invalid status: %d", resp.StatusCode)
+		return jsonrpc.NewHTTPStatusError(resp.StatusCode)
 	}
 
 	reader := bufio.NewReader(resp.Body)
@@ -175,14 +177,22 @@ func (c *Client) consumeSSEGet(ctx context.Context, reader *bufio.Reader) {
 }
 
 // consumeSSEPost consumes events on a POST-initiated SSE stream and updates lastIDPost.
-func (c *Client) consumeSSEPost(ctx context.Context, reader *bufio.Reader) {
+func (c *Client) consumeSSEPost(ctx context.Context, reader *bufio.Reader, requestData []byte) error {
+	var request struct {
+		ID     interface{} `json:"id"`
+		Method string      `json:"method"`
+	}
+	_ = json.Unmarshal(requestData, &request)
+	waitingForResponse := request.Method != "" && request.ID != nil
 	for {
 		evt, err := readSSE(ctx, reader)
 		if err != nil {
-			if err != io.EOF && err != io.ErrUnexpectedEOF && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-				c.base.SetError(err)
+			// A clean EOF completes a notification POST. An unfinished request must
+			// report stream loss instead of waiting on a detached round trip.
+			if err == io.EOF && !waitingForResponse {
+				return nil
 			}
-			return
+			return err
 		}
 		if evt.ID != "" && !c.stateless {
 			if v, err := strconv.ParseUint(strings.TrimSpace(evt.ID), 10, 64); err == nil {
@@ -192,7 +202,13 @@ func (c *Client) consumeSSEPost(ctx context.Context, reader *bufio.Reader) {
 		if evt.Event != "message" || strings.TrimSpace(evt.Data) == "" {
 			continue
 		}
-		c.base.HandleMessage(c.sessionContext(ctx), []byte(evt.Data))
+		data := []byte(evt.Data)
+		c.base.HandleMessage(c.sessionContext(ctx), data)
+		if waitingForResponse && isJSONRPCResponse(request.ID, data) {
+			// HandleMessage completes the registered round trip synchronously.
+			// Its known method outcome takes precedence over any unread tail.
+			return nil
+		}
 	}
 }
 

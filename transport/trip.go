@@ -28,6 +28,13 @@ func NewRoundTrip(request *jsonrpc.Request) *RoundTrip {
 
 // Wait waits for the trip to finish
 func (t *RoundTrip) Wait(ctx context.Context, timeout time.Duration) error {
+	// Preserve a response already delivered before the caller starts waiting,
+	// even when its context was canceled while the transport was unwinding.
+	select {
+	case <-t.done:
+		return t.err
+	default:
+	}
 	if timeout <= 0 {
 		select {
 		case <-ctx.Done():
@@ -105,6 +112,25 @@ func (r *RoundTrips) Match(id any) (*RoundTrip, error) {
 		}
 	}
 	return nil, fmt.Errorf("trip not found")
+}
+
+// Remove releases only the supplied trip. A response may already have matched
+// it and its ID or slot may now belong to another request. Cleanup must never
+// remove that replacement. It is safe to call Remove more than once or after
+// CloseWithError; it does not complete the trip or change the response path.
+func (r *RoundTrips) Remove(trip *RoundTrip) bool {
+	if trip == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, pending := range r.Ring {
+		if pending == trip {
+			r.Ring[i] = nil
+			return true
+		}
+	}
+	return false
 }
 
 // Add adds a new trip

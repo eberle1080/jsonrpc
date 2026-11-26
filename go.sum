@@ -8,8 +8,8 @@ cloud.google.com/go/compute/metadata v0.9.0/go.mod h1:E0bWwX5wTnLPedCKqk3pJmVgCB
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
-github.com/eberle1080/gosh v0.0.0-20260924024703-d461f5d2defc h1:IfQfa6xxFHpuZMPfHOUU1p1U51adFfi+J6zVAyf+LEA=
-github.com/eberle1080/gosh v0.0.0-20260924024703-d461f5d2defc/go.mod h1:GJei/7p+4rVfPCfdswWZBBSofYk7wN8XUkz+MMIPblY=
+github.com/eberle1080/gosh v0.0.0-20261126040201-a5d2a6cfd919 h1:jWr9gDq09frq11t5zYoELFTBFhFgXs5Aa0UisKsWjs8=
+github.com/eberle1080/gosh v0.0.0-20261126040201-a5d2a6cfd919/go.mod h1:GJei/7p+4rVfPCfdswWZBBSofYk7wN8XUkz+MMIPblY=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/go-errors/errors v1.5.1 h1:ZwEMSLRCapFLflTpT7NKaAc7ukJ8ZPEjzlxt8rPN8bk=
