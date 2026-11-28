@@ -368,10 +368,16 @@ func (s *Handler) initSessionHandshake(ctx context.Context, r *http.Request, w h
 	URI := s.MessageURI + "?" + query.Encode()
 	// Register the session before announcing it. A client may POST the moment
 	// it reads the endpoint event; a session not yet registered would be
-	// created afresh for that POST, writing its response to nowhere.
-	s.base.Sessions.Put(ctx, aSession.Id, aSession)
+	// created afresh for that POST, writing its response to nowhere. Announce
+	// it under the session's lock, which every write to the stream takes, so
+	// that a response to that quick request waits for the event to be written
+	// and flushed instead of writing to the stream at the same time.
 	payload := fmt.Sprintf("event: endpoint\ndata: %s\n\n", URI)
-	if _, err := writer.Write([]byte(payload)); err != nil {
+	aSession.Lock()
+	s.base.Sessions.Put(ctx, aSession.Id, aSession)
+	_, err := writer.Write([]byte(payload))
+	aSession.Unlock()
+	if err != nil {
 		s.base.Sessions.Delete(ctx, aSession.Id)
 		return nil, err
 	}
