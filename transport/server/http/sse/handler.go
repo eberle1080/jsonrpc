@@ -366,11 +366,15 @@ func (s *Handler) initSessionHandshake(ctx context.Context, r *http.Request, w h
 		return nil, err
 	}
 	URI := s.MessageURI + "?" + query.Encode()
+	// Register the session before announcing it. A client may POST the moment
+	// it reads the endpoint event; a session not yet registered would be
+	// created afresh for that POST, writing its response to nowhere.
+	s.base.Sessions.Put(ctx, aSession.Id, aSession)
 	payload := fmt.Sprintf("event: endpoint\ndata: %s\n\n", URI)
 	if _, err := writer.Write([]byte(payload)); err != nil {
+		s.base.Sessions.Delete(ctx, aSession.Id)
 		return nil, err
 	}
-	s.base.Sessions.Put(ctx, aSession.Id, aSession)
 	return aSession, nil
 }
 
